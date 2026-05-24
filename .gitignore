@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+
+# Skill dev 产物
+*_raw_payload.json
+*_ai_payload.json
+
+# 环境
+.env
+.venv/
+venv/

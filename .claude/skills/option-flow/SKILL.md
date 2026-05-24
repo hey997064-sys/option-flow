@@ -1,0 +1,363 @@
+---
+name: option-flow
+description: "美股期权聪明钱画像。输入 US 标的（如 NVDA / AAPL / TSLA / MSFT），输出 5 段中文报告，给方向、给主线、给数字依据。触发：/option-flow <ticker>、期权聪明钱、option flow、smart money、Call Wall / Put Wall / Max Pain / gamma。"
+---
+
+# Option-flow
+
+期权聪明钱视角，写一份**对交易有指导价值**的 5 段中文画像。**目标读者**：长桥散户。**核心交付物**：看完知道今天市场在定价什么、Wall 在哪、IV 紧不紧、下一步该怎么看。
+
+## 数据契约
+
+唯一数据源 = `compute.py` 输出的 `ai_payload` 字典（详见 `references/ai-payload-schema.md`）。**ai_payload 之外的数字一律不能出现**。
+
+**单位铁律**（字段名带后缀，禁止换算）：
+- `_pct` → `%`（`atm_iv_pct: 43.8` → `43.8%`）
+- `_pp` → `pp`（`iv_hv_spread_pp: 5.5` → `+5.5pp`）。**pp ≠ %**
+- `_wan` → `万张`
+- `strike` → `${value:.0f}`
+- `pcr_oi` → 直接 3 位小数（`0.791`）
+
+**精度标记**（`term_structure` 各字段的 `precision`）：
+- `indicative`（iv_peak）→ 仅供定性引用，不要做差值比较
+- `normal`（iv_near）→ 可单点引用
+- `high`（iv_far）→ 可参与跨字段比较（如与 HV 做差）
+
+## 风格四原则
+
+1. **指向性明晰**：给方向、给主线、给数字依据。禁"可能 / 或许 / 也许 / 大概 / 似乎"。
+2. **数据骨架**：每个判断后跟数字依据。"偏多"必须跟"PCR 0.791 处于 30 日新低"这种证据。
+3. **通俗易懂**：散户语气。**禁专业行话**：backwardation / contango / vega / gamma / "第 X 分位" / "极高 / 极低" / "创新极高 / 创新极低"。
+4. **轻量化**：能用一句话别用三句，能用数字别用形容词。
+
+### PCR 分位描述对照（必须用，不要写"第 X 分位"）
+
+| `pcr_30d_rank_pct` 数字 | 写法 | 语义 |
+|---|---|---|
+| ≤ 5 | "30 日新低" | 30 天内最低（事实陈述）|
+| 6-20 | "30 日低位" | 偏低区间 |
+| 21-40 | "30 日中下位" | 中下 |
+| 41-60 | "30 日中位" | 中段 |
+| 61-80 | "30 日中上位" | 中上 |
+| 81-95 | "30 日高位" | 偏高区间 |
+| ≥ 95 | "30 日新高" | 30 天内最高（事实陈述）|
+
+⚠️ **禁用"30 日极高 / 极低"**——"极"字会让散户误以为绝对值已到极端水平，但 `pcr_30d_rank_pct` 只反映**相对 30 天历史的统计位置**，跟 PCR 绝对值无关。例如 PCR=0.755 但 rank=100 → 是"30 日新高"（事实）而不是"极高"（强度），因为绝对值仍 < 1 仍是 Call 主导。
+
+⚠️ **小盘股 / 流动性差标的 PCR 分位误读风险**——`pcr_30d_rank_pct` 算法用 `<` 严格比较（详见 `compute.py:_kpi_pcr`），遇 PCR 序列窄、相同值（ties）多的标的（典型如小盘股 / 低成交量 ETF），rank 数字会偏低且对真实情绪变化不敏感。报告 §1 / §2 含义列遇 `data_quality.reliable=false` 时，**附加一句**「⚠️ 期权流动性较低，PCR 分位数字仅供参考」让读者知情，**不要把 rank 当强信号引用**。
+
+## 报告头格式
+
+**常态**（PCR 与价格 / IV 同步，`data_quality.pcr_lag_days == 0`）：
+
+```
+# {symbol_short} · 期权聪明钱画像
+📅 价格 / IV：{data_as_of} · PCR：{pcr_latest_date}
+```
+
+**PCR 滞后**（`data_quality.pcr_lag_days > 0`）：紧接标题下方加 ℹ️ 行：
+
+```
+> ℹ️ PCR 由 broker T+1 提供（每日 12 点前后更新次日数据），当前 PCR 比价格 / IV 数据晚 {pcr_lag_days} 天。
+```
+
+**盘中**（`data_quality.is_intraday = True`）：在 ℹ️ 行之后（或无 ℹ️ 行时直接在标题下方）加 ⚠️ 行：
+
+```
+> ⚠️ 报告基于盘中实时抓取，期权 IV 及成交量会受实时报价波动影响，盘前、盘中、盘后版本会有所差异。
+```
+
+## 段落
+
+| 段 | 谁写 | 字数 |
+|---|---|---|
+| §1 今日定调 | **LLM**（最关键） | 120-180 字 |
+| §2 KPI 表 | 数值列模板 + **LLM 含义列**（每行 ≤ 15 字） | — |
+| §3 ASCII 蝴蝶图 + 3 bullet | 纯模板（paste `ascii` 字段） | — |
+| §4 IV 视角 | 前 3 行模板 + **LLM 末句** | 末句 30-60 字 |
+| §5 策略推荐 | **LLM** | 120-180 字 + 固定免责语 |
+
+### §1 今日定调（LLM 写）
+
+**任务**：写"画像故事 + 交易主线"——让散户秒懂今天市场在定价什么，结尾给一句**可操作主线**。
+
+必须串联：
+- **方向**（多 / 空 / 中性）+ 数字依据（PCR + 你判断）
+- **期权定价**（基于 `iv_hv_spread_pp` 数字 + 贵 / 合理 / 便宜含义）
+- **Wall 区间含义**（基于 call_wall / put_wall / 现价的位置）
+- 若 `iv_peak` 不为 None，提一句近期 IV 凸点（只描述现象、**不指明事件类型**）
+- **末句必须是交易主线**——"突破 \$X 看 \$Y" / "等回踩 \$Z 再判断" / "事件前不入场" 等
+
+### §2 KPI 仪表盘（数值列模板 + LLM 含义列）
+
+```
+| 指标 | 数值 | 含义 |
+|---|---|---|
+| PCR · OI | **{pcr_oi:.3f}** | {LLM: ≤15 字解读 PCR 状态，引用分位区间} |
+| 30D ATM IV | **{atm_iv_pct:.1f}%** | {LLM: ≤15 字解读市场紧张程度} |
+| HV (30D) | **{hv_pct:.1f}%** | 过去 30 个交易日实际波动 |
+| IV − HV | **{iv_hv_spread_pp:+.1f}pp** | {LLM: ≤15 字解读偏贵 / 合理 / 偏便宜 + 操作含义} |
+| Max Pain | **${max_pain.strike:.0f}** | 距现价 {max_pain.distance_pct:+.1f}% |
+| Call/Put Wall | **${call_wall.strike:.0f} / ${put_wall.strike:.0f}** | {call_wall.distance_pct:+.1f}% / {put_wall.distance_pct:+.1f}% |
+```
+
+含义列约束：
+- **≤ 15 字**
+- **不重复数值列**（PCR 行不要写"0.791"）
+- **不指明事件类型**
+- **不出现 backwardation / contango / vega / gamma**
+
+### §3 关键水位（纯模板 · 无 LLM）
+
+**直接 paste `key_levels.oi_distribution.ascii` 字段，整段包在 ` ``` ` 代码块里**。compute.py 已按 `references/ascii-butterfly-template.md` 规则预渲染，**禁止 LLM 手画或抄数**——LLM 抄 158 行 OI 实测会大概率错位。
+
+蝴蝶图代码块下面紧跟 bullet：
+- 上方阻力 **${call_wall.strike}**（Call Wall）：Call OI **{call_wall.oi_wan} 万张**，距现价 **{call_wall.distance_pct:+.1f}%**
+- 下方支撑 **${put_wall.strike}**（Put Wall）：Put OI **{put_wall.oi_wan} 万张**，距现价 **{put_wall.distance_pct:+.1f}%**
+- Max Pain **${max_pain.strike}** 引力中枢，距现价 **{max_pain.distance_pct:+.1f}%**
+- **深度支撑**（如 `deep_supports` 非空）：列出每个 `{strike} (OI {oi_wan}万, {distance_pct:+.1f}%)`，逗号分隔；为空时省略该 bullet
+- **深度阻力**（如 `deep_resistances` 非空）：同上格式；为空时省略
+
+**Wall vs 深度集群的区别**（v2 算法 2026-05-24 上线）：
+- Wall = 现价**近端**支撑/阻力（同侧距 cp 最近、OI ≥ 3 万的 strike），日内交易级
+- 深度集群 = Wall 之外的**远端**支撑/阻力集中点（OI ≥ 5 万），趋势级
+- 例：SPY 5/22 Put Wall=$735（近端支撑），深度支撑 $730/$725/$720/$710/$700（OI 14.5 万的 $700 是深底，但不是日内 Wall）
+
+### §4 波动率视角（前 3 行模板 + LLM 末句）
+
+```
+- **近端最紧张**：{iv_peak.expiry}（{iv_peak.days_to_expiry}天后）IV **{iv_peak.iv_pct:.1f}%**
+- **近端常态**：5-14 天 IV 在 **{iv_near.iv_pct:.0f}%** 附近
+- **远端均衡**：30 天后 IV 回到 **{iv_far.iv_pct:.1f}%**
+
+→ {LLM 一句话定性 · 30-60 字}
+```
+
+LLM 末句要求：
+- 解读 IV 期限结构含义（近端凸 / 远端均衡 / 全段紧张等）
+- **只描述现象、不指明事件类型**（不说"财报 / FOMC / CPI / 关税"）
+- 不出现 backwardation / contango / humped / flat 专业词
+
+`iv_peak = None` 时：第一行改"无明显近期 IV 凸点（近端与远端 IV 接近）"，末句改"IV 期限结构平稳，市场无近期事件溢价。"
+
+### §5 策略推荐（LLM 写 · 卡片式表格 + 固定免责语）
+
+**任务**：基于 ai_payload 给**可执行**的期权策略——方向 + 工具 + Strike + 波动率视角，**不指定到期日**（期限由读者自选）。末尾固定免责语。
+
+**结构**（方向句 + 候选策略表 + 期限说明 + 免责）：
+
+```
+**方向**：<做多 / 做空 / 中性偏多 / 中性偏空 / 中性震荡>（一句话依据：PCR 分位 + Wall 距离 + 价格相对 Max Pain，≤ 50 字）
+
+**候选策略**（Strike 必须来自 `call_wall.strike` / `put_wall.strike` / `max_pain.strike`，可参考深度集群作为目标价）：
+
+| 偏好 | 工具 | Strike | 理由 |
+|---|---|---|---|
+| 卖方 / 首选（如 IV 贵）| 卖出 Strangle | $X Put + $Y Call | IV 偏贵，押区间震荡收权利金 |
+| 偏多 | 裸买 Call | $Y | 突破阻力看 $Z |
+| 偏空 | 裸买 Put | $X | 跌破支撑看 $W |
+| 持股增收 | 备兑 Call | $Y | 卖出 Call Wall 收权利金 |
+
+**期限**：到期日由读者自选——短线博波动选近端到期，趋势跟随选 1-2 月以上。
+
+> ⚠️ 策略基于公开期权链数据，仅供参考，不构成投资建议。期权风险显著高于股票现货，请谨慎评估自身风险承受能力。
+```
+
+**表格规则**：
+- 3-4 行候选即可，不需要把表填满（IC / Butterfly 因 strike 不够不推荐）
+- "偏好"列示例：卖方 / 偏多 / 偏空 / 中性震荡 / 持股增收 / 持股对冲
+- "理由"列 ≤ 25 字，给出"为什么这个策略对应当前画像"
+
+### Strike 选择硬约束
+
+LLM 推荐的所有 strike **必须严格来自** ai_payload 字段，禁止编造：
+
+| 字段 | 用途 |
+|---|---|
+| `key_levels.call_wall.strike` | 上方阻力 |
+| `key_levels.put_wall.strike` | 下方支撑 |
+| `key_levels.max_pain.strike` | 引力中枢 |
+
+### 可推荐工具表（受 3 strike 上限约束）
+
+| 工具 | 用到的 strike |
+|---|---|
+| 裸买 Call | call_wall |
+| 裸买 Put | put_wall |
+| Straddle | max_pain Call + max_pain Put |
+| Strangle | put_wall Put + call_wall Call |
+| Call Spread | max_pain + call_wall |
+| Put Spread | put_wall + max_pain |
+| 备兑 Call（持股增收）| call_wall（卖 Call）|
+| 保护性 Put（持股对冲）| put_wall（买 Put）|
+
+**Iron Condor / Iron Butterfly 不在推荐范围**（需 4 strike，超 ai_payload 提供）。
+
+### 期限措辞
+
+- ✅「短期到期」「近端到期」「1-2 月到期」「中长期到期」
+- ❌「5/22 到期」「下周到期」（不指定具体日期）
+- ❌「财报后到期」「FOMC 后到期」（不指明事件类型，hard-rules 3.1）
+
+## 禁止
+
+- 编造 `ai_payload` 之外的数字
+- 单位错位（pp 写成 %、万张写成张、strike 写成"美元"）
+- 指明事件类型（"财报 / FOMC / CPI / 关税"）—— LLM 无日历无法验证
+- 统计行话（"第 X 分位 / 标准差 / 相关系数 / 创新极低 / 创新极高"）—— 散户看不懂
+- 专业 vol 术语（backwardation / contango / vega / gamma / humped / flat）—— 散户看不懂
+- 模糊弱化词（可能 / 或许 / 也许 / 大概 / 似乎 / 看上去）—— 跟"指向性明晰"冲突
+- 浮夸而无数据依据（有数字支撑可以"飙升 / 暴跌"，无依据不行）
+- 指代非公开信息（"内幕消息 / 知情人士"）
+
+## 错误降级
+
+| 错误形态 | 处理 |
+|---|---|
+| 非美股 symbol | 「option-flow 当前仅支持美股（.US 后缀）」 |
+| 标的无期权 | 「{symbol} 当前无活跃期权链」 |
+| 必填缺（pcr_oi / atm_iv_pct / oi_distribution） | 抛错，不出半截报告 |
+| **`data_quality.low_liquidity=true`** | **走拒绝路径，输出固定冷门标的简报**（见下方）——不出 §1-§5 完整报告 |
+| `data_quality.reliable=false`（但非冷门）| 报告头加 `⚠️ 期权流动性较低（活跃 strike {n} 个），数据仅供参考` |
+| `data_quality.is_intraday=true` | 报告头加风险提示 banner（见上文） |
+| `data_quality.pcr_lag_days > 0` | 报告头加 PCR 滞后说明（见上文） |
+| `call_wall` / `put_wall` 任一缺 | §1 改写"核心关注 Max Pain"，§2/§3/§5 标「— Wall 缺失」 |
+| `iv_peak = None` | §4 按上面规则降级 |
+
+### 冷门标的简报（`data_quality.low_liquidity=true` 时输出）
+
+**直接输出以下内容，不出 §1-§5 完整报告**（变量从 ai_payload 填）：
+
+```markdown
+# {symbol_short} · 期权流动性不足，无法画像
+
+**{symbol_short}** 短期（≤14 天）期权流动性过低，单 strike 最大 OI 仅 **{data_quality.max_strike_oi_wan} 万张**（option-flow 阈值 ≥ 1 万张）。在这种数据稀疏的标的上，Wall / Max Pain / 蝴蝶图 / 策略推荐都会建立在噪声上，**不出报告比误导用户更负责**。
+
+📊 当前可信指标（聚合口径仍有效）：
+
+| 指标 | 数值 | 含义 |
+|---|---|---|
+| PCR · OI | **{pcr_oi:.3f}** | 服务端聚合，跨 expiry T+1 |
+| 30D ATM IV | **{atm_iv_pct:.1f}%** | VIX 同口径方差插值 |
+| HV (30D) | **{hv_pct:.1f}%** | 过去 30 个交易日实际波动 |
+| 短期最大单 strike OI | **{data_quality.max_strike_oi_wan} 万张** | 流动性诊断 |
+
+**option-flow 适用范围**：流动性高的美股——大盘 ETF（SPY/QQQ/IWM）、大盘股、高 beta 个股、主流 sector ETF。冷门 ETF / 小盘股 / 低成交量标的不适合。
+
+其他可选：
+- `/quote {symbol}` —— 实时报价
+- `/kline {symbol}` —— K 线走势
+- `/news {symbol}` —— 新闻 / 公告
+
+---
+⚠️ 数据来自公开期权链聚合，不构成投资建议。
+```
+
+**规则**：
+- 表格里的 4 行数值都来自 ai_payload，**不要编造**
+- 标题不要写"分析"或"画像"——明确说"无法画像"
+- 文案不要软化（避免"基本上"、"可能"、"或许"）——直接告诉用户不适合
+- 末尾免责语保留
+
+## 三个完整正例（真实数据，2026-05-21 拉取）
+
+### 正例 1 · NVDA（事件前夕 · iv_peak 触发）
+
+```markdown
+# NVDA · 期权聪明钱画像
+📅 价格 / IV：2026-05-20 · PCR：2026-05-20
+
+## §1 今日定调
+
+NVDA 散户偏多但 IV 已含溢价。PCR **0.791** 处于 **30 日新低**，Call OI 占比偏高，散户在押大幅上涨；同时避险盘减少。IV 比 HV 高 **+5.5pp**，期权定价偏贵；5/22 单日 IV 飙至 **92.4%**，市场押注当日 **±8% 大幅波动**。现价 $223 夹在 $210 Put Wall 与 $240 Call Wall 之间。
+
+**交易主线**：5/22 大事件前不入场（IV 偏贵 + 情绪偏热是 contrarian 警告）；事件后看突破——破 $240 看 $245-250，破 $210 看 $200-205。
+
+## §2 KPI 仪表盘
+
+| 指标 | 数值 | 含义 |
+|---|---|---|
+| PCR · OI | **0.791** | 30 日新低，Call 占优 |
+| 30D ATM IV | **43.8%** | 市场紧张度偏高 |
+| HV (30D) | **38.4%** | 过去 30 个交易日实际波动 |
+| IV − HV | **+5.5pp** | 期权偏贵，做多波动率不便宜 |
+| Max Pain | **$215** | 距现价 -3.8% |
+| Call/Put Wall | **$240 / $210** | +7.4% / -6.0% |
+
+## §3 关键水位
+
+[ASCII 蝴蝶图]
+
+- 上方阻力 **$240**（Call Wall）：Call OI **10.2 万张**，距现价 **+7.4%**
+- 下方支撑 **$210**（Put Wall）：Put OI **4.0 万张**，距现价 **-6.0%**
+- Max Pain **$215** 引力中枢，距现价 **-3.8%**
+
+## §4 波动率视角
+
+- **近端最紧张**：2026-05-22（2 天后）IV **92.4%**
+- **近端常态**：5-14 天 IV 在 **55%** 附近
+- **远端均衡**：30 天后 IV 回到 **42.5%**
+
+→ 5/22 单日 IV 飙至 92%，市场押注当日大幅波动；近端常态 55% 仍偏高，事件后回落到 42% 才算释放完毕。
+
+## §5 策略推荐
+
+**方向**：中性偏多但避免单边追涨——PCR 30 日新低显示散户已偏多、IV +5.5pp 已含溢价，单边追涨性价比低。
+
+**候选策略**：
+
+| 偏好 | 工具 | Strike | 理由 |
+|---|---|---|---|
+| 双向博波动 | 买入 Strangle | $210 Put + $240 Call | 押双向大幅波动，跨越任一 Wall 即获利 |
+| 偏多 | 裸买 Call | $240 | 突破阻力看 $245-250 |
+| 偏空 | 裸买 Put | $210 | 跌破支撑看 $200-205 |
+| 卖方 / IV 偏贵 | 卖 Iron Strangle | $210 / $240 | 收 IV 回落 + 区间震荡权利金 |
+
+**期限**：到期日由读者自选——博短线大幅波动选近端到期，趋势跟随选 1-2 月以上。
+
+> ⚠️ 策略基于公开期权链数据，仅供参考，不构成投资建议。期权风险显著高于股票现货，请谨慎评估自身风险承受能力。
+
+---
+⚠️ 基于公开期权链聚合，不构成投资建议。
+```
+
+### 正例 2 · AAPL（平淡日 · iv_peak=None · Wall 窄区间）
+
+```markdown
+# AAPL · 期权聪明钱画像
+📅 价格 / IV：2026-05-20 · PCR：2026-05-20
+
+## §1 今日定调
+
+AAPL 中性，Wall 区间偏窄。PCR **0.703** 处于 **30 日中下位**，Call/Put 接近 1:1，市场预期均衡。IV **21.9%** 与 HV **22.1%** 基本持平（**-0.2pp**），期权定价合理无折价；期限结构平稳，5-14 天 IV 19.8%、30 天后回到 23.5%，无近期事件溢价。现价 $302 夹在 $280 Put Wall（OI 仅 **0.9 万张**，支撑薄）与 $310 Call Wall 之间。
+
+**交易主线**：无催化剂下震荡为主——破 $310 看 $315，跌破现价可关注 Max Pain $290 引力。Put Wall 薄说明下方支撑弱，止损要紧。
+
+## §4 波动率视角
+
+- **近端最紧张**：无明显近期 IV 凸点（近端与远端 IV 接近）
+- **近端常态**：5-14 天 IV 在 **20%** 附近
+- **远端均衡**：30 天后 IV 回到 **23.5%**
+
+→ IV 期限结构平稳，市场无近期事件溢价。
+```
+
+### 正例 3 · MSFT（全期限平稳 · iv_peak=None）
+
+```markdown
+# MSFT · 期权聪明钱画像
+📅 价格 / IV：2026-05-20 · PCR：2026-05-20
+
+## §1 今日定调
+
+MSFT 中性，期权定价微便宜。PCR **0.478** 处于 **30 日中位**（MSFT 长期 Call 占优属常态）；IV **29.1%** 与 HV **30.8%** 基本持平（**-1.7pp**），做多波动率略有折价。期限结构平稳，5-14 天与 30 天后 IV 都在 29% 附近，无近期事件溢价。现价 $421 夹在 $410 Put Wall 与 $440 Call Wall 之间，下方距离仅 **-2.6%**。
+
+**交易主线**：区间偏窄震荡为主——现价已逼近 Put Wall，向下空间有限；突破 $440 看 $445，跌破 $410 转弱。Max Pain $415 是引力中枢，回踩可关注。
+```
+
+## 参考文件
+
+- [hard-rules.md](references/hard-rules.md) — 数据真实性 + 单位铁律 + 禁用清单 + PCR 时效说明
+- [ai-payload-schema.md](references/ai-payload-schema.md) — 字段契约速查
+- [ascii-butterfly-template.md](references/ascii-butterfly-template.md) — §3 蝴蝶图绘制规则
+- [output-format.md](references/output-format.md) — 5 段 markdown 模板完整示例
