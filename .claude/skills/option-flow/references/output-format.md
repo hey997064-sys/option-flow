@@ -89,20 +89,9 @@
 
 常态（三个条件全部不满足）：header 只有标题 + 日期行，无 banner。
 
-## 冷门标的拒绝路径（`data_quality.low_liquidity = true`）
+## 期权盘子太小拒绝路径（`data_quality.low_liquidity = true`）
 
-**不出 §1-§5 完整报告**——直接输出 SKILL.md「冷门标的简报」模板：
-
-- 标题：`# {symbol_short} · 期权流动性不足，无法画像`
-- 一段诊断文字（点名 `max_strike_oi_wan` < 阈值 1 万）
-- 4 行可信指标表（PCR / 30D IV / HV / 短期最大单 strike OI）
-- 适用范围说明 + 引导到 `/quote` / `/kline` / `/news`
-- 免责语
-
-文案要求（详见 SKILL.md「冷门标的简报」节）：
-- 4 行数值都来自 ai_payload，**不要编造**
-- 标题明确说"无法画像"，不要软化成"分析"
-- 不用"基本上 / 可能 / 或许"等弱化词
+完整模板与文案约束见 **SKILL.md「期权盘子太小简报」段**。本文件不重复定义——SKILL.md 是 SoT，避免文案漂移。
 
 ## §1 详细约束（LLM 全写，120-180 字）
 

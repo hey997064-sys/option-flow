@@ -1,6 +1,6 @@
 """Data fetch layer for the /option-flow skill.
 
-Pulls a raw_payload dict (see docs/skill-interface.md §2) using the
+Pulls a raw_payload dict (see references/raw-payload-schema.md) using the
 ``longbridge`` CLI as the only IO boundary. No SDK imports — keeps the skill
 free from the heavyweight Options Edge dependency stack.
 
@@ -12,7 +12,7 @@ Flow per symbol (single public entry: ``fetch(symbol)``):
                   + ``kline``  (also gives current_price + stock_closes)
   4. ATM±10% filter on each window's strikes
   5. Build OCC symbols, one bulk ``option quote`` call → OI / IV / volume
-  6. Assemble raw_payload dict matching skill-interface.md contract
+  6. Assemble raw_payload dict matching references/raw-payload-schema.md contract
 
 Rate-limit posture:
   - option_quote is server-side limited to ~200/60s (Options Edge code says
@@ -386,7 +386,7 @@ def fetch(symbol: str) -> dict:
         symbol: e.g. ``"NVDA.US"``. Must end in ``.US`` (skill is US-only).
 
     Returns:
-        raw_payload dict per docs/skill-interface.md §2.
+        raw_payload dict per references/raw-payload-schema.md.
 
     Raises:
         CLIError: longbridge CLI failure (non-zero exit, timeout, bad JSON).
@@ -719,70 +719,11 @@ def fetch(symbol: str) -> dict:
     }
 
 
-# ---------------------------------------------------------------- diagnostic
-
-def _debug_pcr_timezone(symbol: str) -> str:
-    """Pull raw PCR timestamps and print UTC/ET/HK date attribution.
-
-    Standalone diagnostic for Issue C — lets the user inspect which timezone
-    the broker's timestamps actually correspond to. Returns the printable
-    report string (so callers can save to file).
-    """
-    pcr_resp = _fetch_pcr_daily(symbol, count=30)
-    stats = pcr_resp.get("stats", []) if isinstance(pcr_resp, dict) else []
-    et = ZoneInfo("America/New_York")
-    hk = ZoneInfo("Asia/Shanghai")
-
-    lines: list[str] = []
-    lines.append(f"# PCR timezone diagnostic — {symbol}")
-    lines.append(f"# generated {datetime.now(et).isoformat(timespec='seconds')}")
-    lines.append(f"# rows: {len(stats)}")
-    lines.append("")
-    lines.append(f"{'timestamp':>12}  {'UTC datetime':<26}  {'UTC date':<11}  {'ET date':<11}  {'HK date':<11}  divergence")
-    lines.append("-" * 100)
-
-    diff_count = 0
-    for row in stats:
-        try:
-            ts = int(row["timestamp"])
-        except (KeyError, ValueError, TypeError):
-            continue
-        utc_dt = datetime.fromtimestamp(ts, tz=timezone.utc)
-        utc_d = utc_dt.date()
-        et_d = datetime.fromtimestamp(ts, tz=et).date()
-        hk_d = datetime.fromtimestamp(ts, tz=hk).date()
-        divergent = "UTC≠ET" if utc_d != et_d else ("ET≠HK" if et_d != hk_d else "")
-        if divergent:
-            diff_count += 1
-        lines.append(
-            f"{ts:>12}  {utc_dt.isoformat(' '):<26}  {utc_d!s:<11}  {et_d!s:<11}  {hk_d!s:<11}  {divergent}"
-        )
-
-    lines.append("")
-    lines.append(f"Total divergent rows (UTC date ≠ ET date OR ET date ≠ HK date): {diff_count}/{len(stats)}")
-    lines.append("")
-    lines.append("Interpretation:")
-    lines.append("  - If UTC and ET dates match across the whole sample, the broker is")
-    lines.append("    anchoring timestamps at exactly 00:00 ET (= 04:00 UTC). UTC and ET")
-    lines.append("    give identical dates and Issue C is a false alarm — only the")
-    lines.append("    staleness warning is the substantive change in v3.")
-    lines.append("  - If UTC date is ahead of ET date by 1 on edge timestamps, the broker")
-    lines.append("    is using UTC midnight or HK midnight anchor — UTC conversion would")
-    lines.append("    have been off by a day from the actual US trading day.")
-    lines.append("  - If HK date matches and the others lag, the broker is HK-anchored")
-    lines.append("    and we should consider HK conversion (escalate to user first).")
-    return "\n".join(lines)
-
-
 # ---------------------------------------------------------------- CLI entry
 
 if __name__ == "__main__":
-    if len(sys.argv) >= 3 and sys.argv[2] == "--debug-pcr-tz":
-        report = _debug_pcr_timezone(sys.argv[1])
-        print(report)
-        sys.exit(0)
     if len(sys.argv) < 2:
-        print("usage: fetch.py SYMBOL [--debug-pcr-tz]", file=sys.stderr)
+        print("usage: fetch.py SYMBOL", file=sys.stderr)
         sys.exit(2)
     payload = fetch(sys.argv[1])
     print(json.dumps(payload, indent=2, ensure_ascii=False))

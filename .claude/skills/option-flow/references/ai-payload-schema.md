@@ -22,7 +22,7 @@
 | 字段 | 类型 | 必填 | 含义 | 用在哪段 |
 |---|---|---|---|---|
 | `pcr_oi` | float | Y | Put/Call OI 比；3 位小数显示 | §1 / §2 / §5 |
-| `pcr_30d_rank_pct` | float \| None | N | 0-100，PCR 在 30 日里的分位；用 5 档对照表翻译，不写"第 X 分位" | §1 / §2 / §5 |
+| `pcr_30d_rank_pct` | float \| None | N | 0-100，PCR 在 30 日里的分位；用 7 档对照表翻译（详见 SKILL.md），不写"第 X 分位" | §1 / §2 / §5 |
 | `atm_iv_pct` | float | Y | 30D ATM IV（VIX-style 方差插值口径） | §1 / §2 |
 | `hv_pct` | float \| None | N | 30 交易日 HV（CBOE 标准，需 31 条收盘价才能算） | §2 |
 | `iv_hv_spread_pp` | float \| None | N | `atm_iv_pct - hv_pct`，**百分点**（pp 不是 %） | §1 / §2 |
@@ -134,24 +134,8 @@ term_structure:
 | **§2 KPI 表** | `kpi.*`（全部）· `key_levels.max_pain.{strike, distance_pct}` · `key_levels.{call,put}_wall.{strike, distance_pct}` |
 | **§3 关键水位** | `current_price` · `key_levels.oi_distribution.*` · `key_levels.{call,put}_wall.*` · `key_levels.max_pain.*` |
 | **§4 IV 视角** | `term_structure.{iv_peak, iv_near, iv_far}` |
-| **§5 策略推荐** | 方向句：`kpi.{pcr_oi, pcr_30d_rank_pct}` · `current_price` · `key_levels.{call,put}_wall.{strike, distance_pct}` · `key_levels.max_pain.strike`<br>卡片表：`key_levels.{call_wall, put_wall, max_pain}.strike`（Strike 仅可取自这 3 个字段）· `key_levels.oi_distribution.clusters`（可作目标价参考）· `kpi.iv_hv_spread_pp`（理由列 IV 贵贱判断，可选）<br>期限说明 & 免责语：**模板段，不绑定字段** |
+| **§5 策略推荐** | 方向句：`kpi.{pcr_oi, pcr_30d_rank_pct}` · `current_price` · `key_levels.{call,put}_wall.{strike, distance_pct}` · `key_levels.max_pain.strike`<br>卡片表：`key_levels.{call_wall, put_wall, max_pain}.strike`（Strike 仅可取自这 3 个字段）· `key_levels.{deep_supports, deep_resistances}`（可作目标价参考）· `kpi.iv_hv_spread_pp`（理由列 IV 贵贱判断，可选）<br>期限说明 & 免责语：**模板段，不绑定字段** |
 
 ## 降级规则速查
 
-| 字段缺失 / 为 None | 后果 |
-|---|---|
-| `pcr_oi` | **抛错**（必填） |
-| `atm_iv_pct` | **抛错**（必填） |
-| `oi_distribution.strikes` 长度 < 3 | **抛错**（必填） |
-| `pcr_30d_rank_pct` | §1 / §2 / §5 去掉分位描述（如"30 日极低"）|
-| `hv_pct` | §2 删两行；§1 跳过「期权定价{贵贱}」描述 |
-| `iv_hv_spread_pp` | 同上 |
-| `call_wall` | §1 改写「核心关注 Max Pain」；§2 / §3 / §5 标「— Wall 缺失」 |
-| `put_wall` | 同上 |
-| `max_pain` | §2 / §3 跳过 Max Pain 行/标注 |
-| `iv_peak` 为 None | §4 按 `hard-rules.md §7` 降级规则改写 |
-| `iv_near` 或 `iv_far` 为 None | 罕见，发生时该行写「数据不足」，末句改写 |
-| `data_quality.low_liquidity = true` | **走拒绝路径，输出冷门标的简报，不出 §1-§5 完整报告** |
-| `data_quality.reliable = false`（非冷门）| 报告头加 ⚠️ 低流动性 banner |
-| `data_quality.is_intraday = true` | 报告头加 ⚠️ 盘中 banner |
-| `data_quality.pcr_lag_days > 0` | 报告头加 ℹ️ PCR 滞后 banner |
+字段缺失 / 为 None / 异常时的处理详见 **SKILL.md「错误降级」表**（这是 SoT，避免多处漂移）。本文件只负责字段契约（哪些必填、哪些可选、单位是什么），不重复降级后果。

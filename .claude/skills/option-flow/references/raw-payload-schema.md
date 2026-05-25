@@ -1,5 +1,7 @@
 # raw_payload 字段契约（fetch → compute）
 
+> **开发者参考文档**——本文件描述 `fetch.py → compute.py` 的内部契约，**仅供调试 / 算法层开发**，LLM 渲染时不消费此 schema（LLM 消费的是 `ai-payload-schema.md` 描述的 `ai_payload`）。
+>
 > `fetch.py` 返回 dict、`compute.py` 消费 dict。两层之间的契约文档化在此。
 > 改字段名 / 类型 = 跨层 breaking change，必须同时改 compute.py + 加测试。
 

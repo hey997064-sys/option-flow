@@ -63,7 +63,9 @@ def main(argv: list[str]) -> int:
         return 4
     elapsed = time.time() - t0
 
-    out_path = Path(__file__).parent / f"{symbol.split('.')[0]}_raw_payload.json"
+    out_dir = Path(__file__).parent / "_dev_payloads"
+    out_dir.mkdir(exist_ok=True)
+    out_path = out_dir / f"{symbol.split('.')[0]}_raw_payload.json"
     out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
 
     print(_summarize(payload))

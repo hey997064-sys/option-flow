@@ -132,21 +132,14 @@ LLM 可填的开放位（参考 SKILL.md）：
 
 6.4 **滞后超 5 天 → fetch 层 stderr WARN**（可能 broker 停发该 symbol PCR feed）。LLM 不需要感知，照常出报告即可。
 
-## 7. 错误降级 vs 报错的边界
+## 7. 错误降级（SoT 在 SKILL.md）
 
-| 错误形态 | 处理 |
-|---|---|
-| 非美股 symbol（无 .US 后缀） | 「option-flow 当前仅支持美股（.US 后缀）」 |
-| 标的无活跃期权链 | 「{symbol} 当前无活跃期权链」 |
-| `pcr_oi` / `atm_iv_pct` / `oi_distribution` 必填缺失 | **抛错**，不出半截报告 |
-| `data_quality.low_liquidity = true` | **走拒绝路径**——输出冷门标的简报（一句话说明流动性不足 + 建议关注大盘 ETF / 大盘股），**不出 §1-§5 完整报告**（避免向散户输出可信度低的画像）|
-| `data_quality.reliable = false`（非冷门）| 报告头加 `⚠️ 期权流动性较低（活跃 strike {n} 个），数据仅供参考` |
-| `data_quality.is_intraday = true` | 报告头加盘中风险提示 banner（见 SKILL.md）|
-| `data_quality.pcr_lag_days > 0` | 报告头加 PCR 滞后说明 banner（见 SKILL.md）|
-| `call_wall` / `put_wall` 任一缺 | §1 改写"核心关注 Max Pain"；§2 / §3 / §5 标「— Wall 缺失」 |
-| `iv_peak = None` | §4 第 1 行改"无明显近期 IV 凸点（近端与远端 IV 接近）"，末句改"IV 期限结构平稳，市场无近期事件溢价。" |
-| `hv_pct` / `iv_hv_spread_pp` 为 None | §2 删两行；§1 跳过「期权定价{贵贱}」描述 |
-| `pcr_30d_rank_pct` 为 None | §2 含义列 / §5 情绪句去掉分位描述 |
+完整错误降级表见 **SKILL.md「错误降级」段**——本节只说明**抛错 vs 降级**的层级划分：
+
+- **抛错（不出报告）**：`pcr_oi` / `atm_iv_pct` / `oi_distribution` 必填字段任一缺失；非美股 symbol；标的无活跃期权链
+- **拒绝路径（不出 §1-§5）**：`data_quality.low_liquidity = true` —— 输出"期权盘子太小"简报（SKILL.md 模板）
+- **报告头 banner**：`is_intraday` / `pcr_lag_days > 0` / `reliable = false`（非冷门时）
+- **段落降级**：`call_wall` / `put_wall` / `hv_pct` / `iv_hv_spread_pp` / `iv_peak` / `pcr_30d_rank_pct` 任一为 None 时按 SKILL.md 降级表处理
 
 ## 8. 输出格式纪律
 

@@ -124,7 +124,7 @@ python3 -m unittest discover tests -v
 
 ## 数据口径
 
-- **OI** = ≤14 天短期所有 expiry 在该 strike 合计（不是单 expiry 快照）
+- **OI** = ≤14 天近月所有 expiry 在该 strike 合计（不是单 expiry 快照）
 - **PCR** 用 broker T+1 服务端聚合（盘前 / 12:00 ET 前可能滞后 1 天，报告头会标 ℹ️）
 - **Max Pain** 用 ≤14d 合并 expiry 算（友商可能用单 expiry，结果差几个 strike 属口径差异非 bug）
 - 详见 `.claude/skills/option-flow/references/`

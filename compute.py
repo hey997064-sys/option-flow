@@ -34,7 +34,7 @@
   · _data_quality
   · DTE 锚点 = raw_payload.data_as_of（IV 与价格 as-of 时间）
 
-5 段算法（详见 ~/projects/option/docs/skill-interface.md 三、ai_payload）：
+5 段算法（详见 references/ai-payload-schema.md）：
   ① KPI（pcr_oi / pcr_30d_rank_pct / atm_iv_pct / hv_pct / iv_hv_spread_pp）
   ② key_levels（call_wall / put_wall / max_pain / deep_supports / deep_resistances
                 + oi_distribution 蝴蝶图原料 + ascii 预渲染）
@@ -52,19 +52,15 @@ import math
 from datetime import date
 from statistics import median
 
-# 算法常量（与 skill-interface.md / Options Edge sediment 对齐）
+# 算法常量（与 references/ai-payload-schema.md 对齐）
 ATM_WINDOW_PCT = 0.10           # Wall 在 ATM ± 10% 内
 WALL_MIN_OI_WAN = 3.0           # Wall 判定：现价同侧距离最近、OI ≥ 此阈值（万张）的 strike
 ATM_IV_WINDOW_PCT = 0.05        # ATM IV 插值在 ATM ± 5% 内取样
 TERM_ALGO_MIN_DTE = 7           # _atm_iv_at_days 插值剔除 < 7d 近端（Vega→0 噪声）
 ACTIVE_STRIKES_RELIABLE = 8
 
-# 三窗口（与 raw_payload.contracts.bucket 对齐）
-# 注意：mid/long_iv_pct 字段已删除，但保留 MID/LONG 窗口常量——它们文档化了 fetch 层
-# 在 raw_payload.contracts[*].bucket 标签上的契约（fetch_v4 仍用此口径分桶）。
+# 短桶 DTE 上限（与 raw_payload.contracts[*].bucket="short" 对齐；mid/long 桶由 fetch.py 维护，compute 不消费）
 SHORT_MAX_DTE = 14
-MID_MIN_DTE, MID_MAX_DTE = 30, 60      # fetch 层 bucket 契约，compute 不再消费
-LONG_MIN_DTE, LONG_MAX_DTE = 90, 180   # fetch 层 bucket 契约，compute 不再消费
 
 # 目标天数
 TARGET_30D = 30
@@ -94,7 +90,7 @@ HV_REQUIRED_CLOSES = HV_TRADING_DAYS + 1  # 31 closes → 30 returns
 
 
 def compute(raw_payload: dict) -> dict:
-    """raw_payload → ai_payload（严格符合 skill-interface.md 三、契约）。"""
+    """raw_payload → ai_payload（严格符合 references/ai-payload-schema.md 契约）。"""
     symbol = raw_payload["symbol"]
     current_price = float(raw_payload["current_price"])
     # fetch_v4 起 snapshot_date 是必填顶层字段。不再 fallback 到 fetched_at[:10]。

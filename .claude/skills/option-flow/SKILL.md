@@ -348,7 +348,7 @@ NVDA 散户偏多但 IV 已含溢价。PCR **0.791** 处于 **30 日新低**，C
 | 双向博波动 | 买入 Strangle | $210 Put + $240 Call | 押双向大幅波动，跨越任一 Wall 即获利 |
 | 偏多 | 裸买 Call | $240 | 突破阻力看 $245-250 |
 | 偏空 | 裸买 Put | $210 | 跌破支撑看 $200-205 |
-| 卖方 / IV 偏贵 | 卖 Iron Strangle | $210 / $240 | 收 IV 回落 + 区间震荡权利金 |
+| 卖方 / IV 偏贵 | 卖出 Strangle | $210 Put + $240 Call | 收 IV 回落 + 区间震荡权利金 |
 
 **期限**：到期日由读者自选——博短线大幅波动选近端到期，趋势跟随选 1-2 月以上。
 
@@ -395,6 +395,7 @@ MSFT 中性，期权定价微便宜。PCR **0.478** 处于 **30 日中位**（MS
 ## 参考文件
 
 - [hard-rules.md](references/hard-rules.md) — 数据真实性 + 单位铁律 + 禁用清单 + PCR 时效说明
-- [ai-payload-schema.md](references/ai-payload-schema.md) — 字段契约速查
+- [ai-payload-schema.md](references/ai-payload-schema.md) — 字段契约速查（LLM 渲染时使用）
 - [ascii-butterfly-template.md](references/ascii-butterfly-template.md) — §3 蝴蝶图绘制规则
 - [output-format.md](references/output-format.md) — 5 段 markdown 模板完整示例
+- [raw-payload-schema.md](references/raw-payload-schema.md) — `fetch → compute` 内部契约（**仅开发者参考**，LLM 不消费）
