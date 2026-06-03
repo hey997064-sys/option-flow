@@ -77,8 +77,10 @@ cd option-flow
 
 ## 用法
 
+- 安装：`/plugin install option-flow@<marketplace>`（注册到 marketplace 后；本仓即标准插件结构）
 - Slash command：`/option-flow <SYMBOL.US>` 例 `/option-flow SPY.US`
 - 自然语言：「分析下 SPY 期权聪明钱」、「NVDA option flow」、「看看 QQQ 期权聪明钱在押什么」等
+- 生产入口 `option_flow.py`（fetch→compute→stdout，零落盘）；`run.py` 仅 dev 调试用
 
 ## 输出样例（NVDA 节选）
 
@@ -103,7 +105,7 @@ NVDA 散户偏多但 IV 已含溢价。PCR **0.791** 处于 **30 日新低**，C
 | Max Pain | **$215** | 距现价 -3.8% |
 | Call/Put Wall | **$240 / $210** | +7.4% / -6.0% |
 
-（接 §3 ASCII 蝴蝶图、§4 波动率、§5 策略推荐——完整结构见 `.claude/skills/option-flow/SKILL.md`）
+（接 §3 ASCII 蝴蝶图、§4 波动率、§5 策略推荐——完整结构见 `skills/option-flow/SKILL.md`）
 ```
 
 ## 架构 3 层
@@ -112,7 +114,7 @@ NVDA 散户偏多但 IV 已含溢价。PCR **0.791** 处于 **30 日新低**，C
 |---|---|---|
 | IO 边界 | `fetch.py` | 调 longbridge CLI 抓期权链（短桶 ≤14d，长桶 30-180d）、PCR、kline；纯 stdlib |
 | 算法层 | `compute.py` | 算 Call/Put Wall、Max Pain、IV 期限结构、深度集群、冷门标的判定、ASCII 蝴蝶图预渲染；纯 stdlib |
-| LLM 行为指令 | `.claude/skills/option-flow/SKILL.md`（+ `references/`）| 5 段输出格式 + 硬规则 + 字段速查表，约束 LLM 渲染 |
+| LLM 行为指令 | `skills/option-flow/SKILL.md`（+ `references/`）| 5 段输出格式 + 硬规则 + 字段速查表，约束 LLM 渲染 |
 
 ## 测试
 
@@ -120,19 +122,19 @@ NVDA 散户偏多但 IV 已含溢价。PCR **0.791** 处于 **30 日新低**，C
 python3 -m unittest discover tests -v
 ```
 
-46 tests 覆盖：算法不变量（Wall 方向、Max Pain 算法身份、IV 中位口径、HV 30d 严格 31 closes、PCR lag clamp）+ Mutation tests（每条不变量配反例确认 validator 真能抓 bug）+ Fetch 层 OCC 编码 / DTE 分桶 / US 市场守卫。
+52 tests 覆盖：算法不变量（Wall 方向、Max Pain 算法身份、IV 中位口径、HV 30d 严格 31 closes、PCR lag clamp）+ Mutation tests（每条不变量配反例确认 validator 真能抓 bug）+ Fetch 层 OCC 编码 / DTE 分桶 / US 市场守卫 + 生产入口 `option_flow.py` 编排与零落盘不变量。
 
 ## 数据口径
 
 - **OI** = ≤14 天近月所有 expiry 在该 strike 合计（不是单 expiry 快照）
 - **PCR** 用 broker T+1 服务端聚合（盘前 / 12:00 ET 前可能滞后 1 天，报告头会标 ℹ️）
 - **Max Pain** 用 ≤14d 合并 expiry 算（友商可能用单 expiry，结果差几个 strike 属口径差异非 bug）
-- 详见 `.claude/skills/option-flow/references/`
+- 详见 `skills/option-flow/references/`
 
 ## 局限
 
 - 仅支持美股（`.US` 后缀）
-- **目前仅支持在 Claude Code 上运行**——Cursor / ChatGPT / Claude Desktop / 其他 MCP-compatible client 暂不支持（依赖 `.claude/skills/` 目录约定，这是 Claude Code 私有）
+- **目前仅支持在 Claude Code 上运行**——Cursor / ChatGPT / Claude Desktop / 其他 MCP-compatible client 暂不支持（依赖 Claude Code 插件 / skills 约定与 `${CLAUDE_PLUGIN_ROOT}`，这是 Claude Code 私有）
 - 流动性低的标的会拒绝出报告（这是设计——避免向散户输出可信度低的画像）
 - LLM 输出仍有语义误判风险（散户当参考、不构成投资建议）
 - 期权风险显著高于股票现货，请谨慎评估自身风险承受能力

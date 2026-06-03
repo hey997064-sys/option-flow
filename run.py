@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""CLI entry: ``python3 run.py NVDA.US`` → prints raw_payload JSON + a summary.
+"""CLI entry (DEV-ONLY): ``python3 run.py NVDA.US`` → prints a raw_payload summary and
+writes ``_dev_payloads/<TICKER>_raw_payload.json`` for local inspection.
 
-Also writes ``<TICKER>_raw_payload.json`` in the same directory.
+NOT the plugin runtime entry — production uses option_flow.py (zero-write, prints
+ai_payload to stdout). Kept for local debugging of the fetch layer.
 """
 from __future__ import annotations
 
