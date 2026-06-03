@@ -1,0 +1,6 @@
+{
+  "name": "option-flow",
+  "version": "1.0.0",
+  "description": "美股期权聪明钱画像 — 输入 US 标的，输出 5 段中文报告（方向/主线/数字依据）。Powered by Longbridge CLI.",
+  "author": { "name": "Longbridge", "email": "yirun.yang@longbridge-inc.com" }
+}

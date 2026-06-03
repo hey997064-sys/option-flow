@@ -7,6 +7,21 @@ description: "美股期权聪明钱画像。输入 US 标的（如 NVDA / AAPL /
 
 期权聪明钱视角，写一份**对交易有指导价值**的 5 段中文画像。**目标读者**：长桥散户。**核心交付物**：看完知道今天市场在定价什么、Wall 在哪、IV 紧不紧、下一步该怎么看。
 
+## 执行管线（先跑这步拿到 ai_payload）
+
+本 skill 触发后，**先生成 `ai_payload`，再按下文渲染**。生产入口零落盘，直接 stdout 输出：
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/option_flow.py" <SYMBOL.US>
+```
+
+- `<SYMBOL.US>` = 用户输入标的（如 `NVDA.US`，依赖 longbridge CLI，仅美股）。
+- **stdout 的 JSON 即唯一数据源**，拿到后所有数字只能来自它（见下文数据契约）。
+- **非零退出码 → 把 stderr 内容转述给用户，禁止硬渲染**（防止拿空数据编报告）：
+  - 退出码 3（`NoOptionsError`）→「该标的无可用期权链」
+  - 退出码 4（`CLIError`）→「行情数据获取失败」
+  - 退出码 2 → 提示需要 `<SYMBOL.US>` 参数
+
 ## 数据契约
 
 唯一数据源 = `compute.py` 输出的 `ai_payload` 字典（详见 `references/ai-payload-schema.md`）。**ai_payload 之外的数字一律不能出现**。
