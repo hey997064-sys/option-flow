@@ -38,7 +38,7 @@
 - **Max Pain ${max_pain.strike}** 引力中枢（{max_pain_pull.side}，{max_pain.distance_pct:+.1f}%）
 - **结构判定**：{read_states.structure_label} = {一句方向含义}
 - 深度支撑 / 阻力：{deep_supports[] · deep_resistances[]，任一为空省略}
-- （thin_wall 时）⚠️ 单 strike 最大持仓仅 {max_strike_oi_wan} 万张，墙薄、引力弱，仅供参考
+- （read_states.thin_wall 时）⚠️ 单 strike 最大持仓仅 {data_quality.max_strike_oi_wan} 万张，墙薄、引力弱，仅供参考
 
 ## §4 波动率视角
 
