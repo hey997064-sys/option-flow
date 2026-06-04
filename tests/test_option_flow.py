@@ -75,6 +75,14 @@ class TestOptionFlowEntry(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("usage", buf.getvalue())
 
+    @patch("option_flow.fetch", side_effect=ValueError("only US options supported, got '700.HK'"))
+    def test_non_us_returns_5(self, _mock_fetch):
+        buf = io.StringIO()
+        with redirect_stderr(buf):
+            rc = option_flow.main(["option_flow.py", "700.HK"])
+        self.assertEqual(rc, 5)
+        self.assertIn("仅支持美股", buf.getvalue())
+
 
 class TestOptionFlowMutations(unittest.TestCase):
     """构造违例：若 option_flow 落盘，零落盘检测逻辑必须能抓到。"""

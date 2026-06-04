@@ -20,6 +20,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/option_flow.py" <SYMBOL.US>
 - **非零退出码 → 把 stderr 内容转述给用户，禁止硬渲染**（防止拿空数据编报告）：
   - 退出码 3（`NoOptionsError`）→「该标的无可用期权链」
   - 退出码 4（`CLIError`）→「行情数据获取失败」
+  - 退出码 5（`NonUSError`）→「option-flow 当前仅支持美股（.US 后缀）」
   - 退出码 2 → 提示需要 `<SYMBOL.US>` 参数
 
 ## 数据契约

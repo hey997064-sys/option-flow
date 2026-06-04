@@ -28,6 +28,10 @@ def main(argv: list[str]) -> int:
     except CLIError as e:
         print(f"CLIError: {e}", file=sys.stderr)
         return 4
+    except ValueError as e:
+        # fetch() raises ValueError only for non-US symbols (see fetch docstring).
+        print(f"NonUSError: option-flow 当前仅支持美股（.US 后缀）：{e}", file=sys.stderr)
+        return 5
     ai = compute(raw)
     print(json.dumps(ai, ensure_ascii=False))
     return 0
