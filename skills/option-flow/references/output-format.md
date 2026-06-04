@@ -35,10 +35,11 @@
 
 - **上方阻力 ${call_wall.strike}** · 现价{call_wall_proximity}（{call_wall.distance_pct:+.1f}%）→ {状态读法}；持仓 **{call_wall.oi_wan} 万张**
 - **下方支撑 ${put_wall.strike}** · 现价{put_wall_proximity}（{put_wall.distance_pct:+.1f}%）→ {状态读法}；持仓 **{put_wall.oi_wan} 万张**
-- **Max Pain ${max_pain.strike}** 引力中枢（{max_pain_pull.side}，{max_pain.distance_pct:+.1f}%）
+- **Max Pain ${max_pain.strike}** 引力中枢（{max_pain_pull.side}，{max_pain.distance_pct:+.1f}%[，与 X Wall 重合]）{若 `read_states.max_pain_pull.is_noise = true` 行末补"（薄 OI，引力信号弱，仅供参考）"}
 - **结构判定**：{read_states.structure_label} = {一句方向含义}
-- 深度支撑 / 阻力：{deep_supports[] · deep_resistances[]，任一为空省略}
-- （read_states.thin_wall 时）⚠️ 单 strike 最大持仓仅 {data_quality.max_strike_oi_wan} 万张，墙薄、引力弱，仅供参考
+- **深度支撑**（deep_supports 非空时）：逐个列 `${strike}（{oi_wan} 万张，{distance_pct:+.1f}%）`，逗号分隔，一行写完；为空省略
+- **深度阻力**（deep_resistances 非空时）：同格式；为空省略
+- （read_states.thin_wall 时）⚠️ 单 strike 最大持仓仅 {data_quality.max_strike_oi_wan} 万张，墙薄、引力弱，仅供参考（`thin_wall` 由 compute 判定，LLM 按布尔值直接决定是否出此行）
 
 ## §4 波动率视角
 
@@ -123,10 +124,10 @@
 - **ASCII 蝴蝶图**：绘制规则见 `ascii-butterfly-template.md`，必须用三反引号代码块包裹（确保等宽字体）；compute 预渲染，LLM 不画不抄
 - **bullet（LLM 写，消费 `read_states`）**：共 4-6 行，按实际情况裁剪：
   - bullet 1 / 2：Call Wall / Put Wall — 含 proximity 状态 + 状态读法 + OI 持仓（按 SKILL.md proximity → 读法对照表选词）
-  - bullet 3：Max Pain — 含 `max_pain_pull.side` + distance_pct（与 Wall 重合时补注）
-  - bullet 4：**结构判定** — 直接引用 `read_states.structure_label`（5 值，禁改名）
-  - bullet 5：深度支撑 / 阻力（任一为空省略）
-  - bullet 6：thin_wall caveat（仅 `read_states.thin_wall=true` 时输出）
+  - bullet 3：Max Pain — 含 `max_pain_pull.side` + distance_pct；与 Wall 重合时在括号内追加"，与 X Wall 重合"；`is_noise=true` 时行末补"（薄 OI，引力信号弱，仅供参考）"
+  - bullet 4：**结构判定** — 直接引用 `read_states.structure_label`（5 值，禁改名；对照句见 SKILL.md structure_label 对照表，不自由发挥）
+  - bullet 5：深度支撑 / 阻力（格式：逐个列 `${strike}（{oi_wan} 万张，{distance_pct:+.1f}%）`，逗号分隔，一行写完；任一为空省略）
+  - bullet 6：thin_wall caveat（仅 `read_states.thin_wall=true` 时输出；LLM 按布尔值直接决定，不自行评估阈值）
 - Max Pain 缺失则跳过 bullet 3；任一墙缺失（structure_label=null）跳过结构判定行；走 Wall 缺失细则
 
 **Wall vs 深度集群的区别**（v2 算法 2026-05-24 上线）：Wall = 现价近端支撑/阻力（同侧距 cp 最近、OI ≥ 3 万），日内交易级；深度集群 = Wall 之外的远端集中点（OI ≥ 5 万），趋势级。

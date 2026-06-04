@@ -130,10 +130,11 @@ python3 "${CLAUDE_PLUGIN_ROOT}/option_flow.py" <SYMBOL.US>
 
 - **上方阻力 ${call_wall.strike}** · 现价{call_wall_proximity}（{call_wall.distance_pct:+.1f}%）→ {按 proximity 选读法}；持仓 {call_wall.oi_wan} 万张。
 - **下方支撑 ${put_wall.strike}** · 现价{put_wall_proximity}（{put_wall.distance_pct:+.1f}%）→ {按 proximity 选读法}；持仓 {put_wall.oi_wan} 万张。
-- **Max Pain ${max_pain.strike}** 引力中枢（{max_pain_pull.side}，{max_pain.distance_pct:+.1f}%）{若与某 Wall 同 strike 补"与 X Wall 重合"}。
-- **结构判定**：{structure_label} = {一句话方向含义，如"偏空压顶（非震荡）"}。
-- 深度支撑 / 阻力：{deep_supports / deep_resistances 非空时列出，为空省略}。
-- {若 `read_states.thin_wall = true`}：⚠️ 单 strike 最大持仓仅 {data_quality.max_strike_oi_wan} 万张，墙薄、引力弱，仅供参考。
+- **Max Pain ${max_pain.strike}** 引力中枢（{max_pain_pull.side}，{max_pain.distance_pct:+.1f}%[，与 X Wall 重合]）{若 `read_states.max_pain_pull.is_noise = true` 行末补"（薄 OI，引力信号弱，仅供参考）"}。
+- **结构判定**：{structure_label} = {对照下方 structure_label 对照表取句，不自由发挥}。
+- **深度支撑**（deep_supports 非空时）：逐个列 `${strike}（{oi_wan} 万张，{distance_pct:+.1f}%）`，逗号分隔，一行写完；语义 = Wall 之外的趋势级支撑带、失守 Put Wall 后的下一道防线。为空则省略此 bullet。
+- **深度阻力**（deep_resistances 非空时）：同格式；语义 = 突破 Call Wall 后的趋势级阻力。为空省略。
+- {若 `read_states.thin_wall = true`}：⚠️ 单 strike 最大持仓仅 {data_quality.max_strike_oi_wan} 万张，墙薄、引力弱，仅供参考。`thin_wall` 由 compute 判定，LLM 不自行评估阈值，按布尔值直接决定是否出此⚠️行。
 
 **proximity → 读法对照**：
 | proximity | 读法 |
@@ -145,6 +146,15 @@ python3 "${CLAUDE_PLUGIN_ROOT}/option_flow.py" <SYMBOL.US>
 **机制句**：OI 口径——持仓集中→做市商调仓量大→搬动股价→引力；薄则弱。**禁 gamma 措辞**（见 hard-rules）。
 
 **结构判定行**：直接引用 `read_states.structure_label`（5 值，禁改名）。任一墙缺失（label=null）走 Wall 缺失细则，不写结构判定行。
+
+**structure_label → 结构判定句对照**（结构判定行直接套用，不自由发挥）：
+| structure_label | 结构判定句 |
+|---|---|
+| 天花板紧贴·下方真空 | 偏空压顶，上方紧压、失守现价则下方真空加速（非震荡） |
+| 地板紧贴·上方开阔 | 偏多有撑，下方托底、上方空间打开 |
+| 双墙紧夹·窄震荡 | 双墙锁死现价，区间震荡为主 |
+| 双墙宽松·区间漂移 | 上下均有空间，区间漂移、跟随突破 |
+| null（任一墙缺失） | 不写结构判定行，走 Wall 缺失细则 |
 
 **Wall vs 深度集群的区别**（v2 算法 2026-05-24 上线）：
 - Wall = 现价**近端**支撑/阻力（同侧距 cp 最近、OI ≥ 3 万的 strike），日内交易级
