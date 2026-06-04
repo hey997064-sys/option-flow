@@ -682,5 +682,28 @@ class TestMutationsAreDetected(unittest.TestCase):
             )
 
 
+# -----------------------------------------------------------------------------
+# ⑤ read_states
+# -----------------------------------------------------------------------------
+
+
+class TestReadStates(unittest.TestCase):
+
+    def test_proximity_buckets(self):
+        self.assertEqual(compute._proximity(0.9), "逼近")
+        self.assertEqual(compute._proximity(-2.0), "逼近")   # boundary ≤2 → 逼近
+        self.assertEqual(compute._proximity(3.5), "中等")
+        self.assertEqual(compute._proximity(-5.0), "中等")   # boundary ≤5 → 中等
+        self.assertEqual(compute._proximity(8.0), "远离")
+        self.assertIsNone(compute._proximity(None))
+
+    def test_read_states_present_in_output(self):
+        out = compute.compute(make_raw(contracts=[]))
+        self.assertIn("read_states", out)
+        # No walls in an empty payload → proximity None
+        self.assertIsNone(out["read_states"]["call_wall_proximity"])
+        self.assertIsNone(out["read_states"]["put_wall_proximity"])
+
+
 if __name__ == "__main__":
     unittest.main()
