@@ -950,6 +950,31 @@ def _max_pain_pull(
     return {"side": side, "is_noise": (max_strike_oi_wan or 0) < WALL_MIN_OI_WAN}
 
 
+def _structure_label(
+    call_wall: dict | None,
+    put_wall: dict | None,
+    asymmetry: str | None,
+) -> str | None:
+    """纯墙几何分类（Phase 1，5 值）。任一墙缺失 → None（交 §3 缺墙路径处理）。
+
+    规则（确定性，仅依赖 proximity + asymmetry）：
+      1. 任一墙缺失 → None
+      2. 偏空真空 → 天花板紧贴·下方真空；偏多开阔 → 地板紧贴·上方开阔
+      3. 对称：任一墙 远离 → 双墙宽松·区间漂移；否则 → 双墙紧夹·窄震荡
+    """
+    if not call_wall or not put_wall:
+        return None
+    if asymmetry == "偏空真空":
+        return "天花板紧贴·下方真空"
+    if asymmetry == "偏多开阔":
+        return "地板紧贴·上方开阔"
+    cp = _proximity(call_wall["distance_pct"])
+    pp = _proximity(put_wall["distance_pct"])
+    if "远离" in (cp, pp):
+        return "双墙宽松·区间漂移"
+    return "双墙紧夹·窄震荡"
+
+
 def _read_states(
     current_price: float,
     call_wall: dict | None,
@@ -958,18 +983,19 @@ def _read_states(
     data_quality: dict,
 ) -> dict:
     """key_levels + data_quality → 几何状态。无新数据、无 IO。"""
+    asymmetry = _asymmetry(call_wall, put_wall)
     call_thick = _thickness(call_wall)
     put_thick = _thickness(put_wall)
     return {
         "call_wall_proximity": _proximity(call_wall["distance_pct"]) if call_wall else None,
         "put_wall_proximity": _proximity(put_wall["distance_pct"]) if put_wall else None,
-        "asymmetry": _asymmetry(call_wall, put_wall),
+        "asymmetry": asymmetry,
         "call_wall_thickness": call_thick,
         "put_wall_thickness": put_thick,
         "thin_wall": "薄" in (call_thick, put_thick),
         "max_pain_pull": _max_pain_pull(
             max_pain, current_price, data_quality.get("max_strike_oi_wan")),
-        "structure_label": None,
+        "structure_label": _structure_label(call_wall, put_wall, asymmetry),
     }
 
 

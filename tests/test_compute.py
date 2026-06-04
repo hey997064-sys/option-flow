@@ -769,6 +769,48 @@ class TestReadStates(unittest.TestCase):
     def test_max_pain_pull_none_when_missing(self):
         self.assertIsNone(compute._max_pain_pull(None, 100.0, 12.0))
 
+    def test_structure_label_bearish_vacuum(self):
+        self.assertEqual(
+            compute._structure_label(
+                {"distance_pct": 0.9}, {"distance_pct": -8.0}, "偏空真空"),
+            "天花板紧贴·下方真空")
+
+    def test_structure_label_bullish_open(self):
+        self.assertEqual(
+            compute._structure_label(
+                {"distance_pct": 9.0}, {"distance_pct": -1.0}, "偏多开阔"),
+            "地板紧贴·上方开阔")
+
+    def test_structure_label_tight_range(self):
+        # symmetric, both within 5% → 窄震荡
+        self.assertEqual(
+            compute._structure_label(
+                {"distance_pct": 1.5}, {"distance_pct": -2.0}, "对称"),
+            "双墙紧夹·窄震荡")
+
+    def test_structure_label_loose_drift(self):
+        # symmetric, one wall 远离 (>5%) → 区间漂移
+        self.assertEqual(
+            compute._structure_label(
+                {"distance_pct": 7.0}, {"distance_pct": -6.0}, "对称"),
+            "双墙宽松·区间漂移")
+
+    def test_structure_label_none_when_wall_missing(self):
+        self.assertIsNone(
+            compute._structure_label(None, {"distance_pct": -4.0}, None))
+
+    def test_structure_label_integration_nok_like(self):
+        # call wall +0.9% thin, put wall -8% thin → 偏空真空 structure
+        out = compute.compute(make_raw(
+            current_price=16.85,
+            contracts=_walls_payload(
+                call_oi=26000, put_oi=17000,
+                call_strike=17.0, put_strike=15.5)))
+        rs = out["read_states"]
+        self.assertEqual(rs["structure_label"], "天花板紧贴·下方真空")
+        self.assertTrue(rs["thin_wall"])
+        self.assertEqual(rs["call_wall_proximity"], "逼近")
+
 
 if __name__ == "__main__":
     unittest.main()
