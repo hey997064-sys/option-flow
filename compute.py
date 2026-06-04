@@ -926,7 +926,7 @@ def _asymmetry(call_wall: dict | None, put_wall: dict | None) -> str | None:
         return None
     cd = abs(call_wall["distance_pct"])
     pd = abs(put_wall["distance_pct"])
-    lo = min(cd, pd) or 0.01           # 防除零；一侧贴现价时视为极不对称
+    lo = min(cd, pd) or 0.01           # 防御性除零（_near_wall 保证 distance≠0，此处仅兜底）
     if max(cd, pd) / lo >= ASYMMETRY_RATIO:
         return "偏空真空" if cd < pd else "偏多开阔"
     return "对称"
@@ -992,7 +992,7 @@ def _read_states(
         "asymmetry": asymmetry,
         "call_wall_thickness": call_thick,
         "put_wall_thickness": put_thick,
-        "thin_wall": "薄" in (call_thick, put_thick),
+        "thin_wall": "薄" in (call_thick, put_thick),  # 任一存在的墙为薄即为 True（非"两面皆薄"）
         "max_pain_pull": _max_pain_pull(
             max_pain, current_price, data_quality.get("max_strike_oi_wan")),
         "structure_label": _structure_label(call_wall, put_wall, asymmetry),

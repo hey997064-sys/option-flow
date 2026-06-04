@@ -811,6 +811,34 @@ class TestReadStates(unittest.TestCase):
         self.assertTrue(rs["thin_wall"])
         self.assertEqual(rs["call_wall_proximity"], "逼近")
 
+    def test_one_wall_thin_call_only(self):
+        """Only a thin call wall present (no put contracts) → thin_wall True, put_wall_thickness None."""
+        expiry = _expiry_from_dte(7)
+        contracts = [
+            {
+                "type": "call", "strike": 105.0, "expiry": expiry,
+                "days_to_expiry": 7, "bucket": "short",
+                "open_interest": 20000,  # 2.0万 → 薄
+                "volume": 10, "implied_volatility": 0.30,
+            }
+        ]
+        out = compute.compute(make_raw(contracts=contracts))
+        rs = out["read_states"]
+        self.assertTrue(rs["thin_wall"])
+        self.assertIsNone(rs["put_wall_thickness"])
+
+    def test_asymmetry_exact_boundary(self):
+        """_asymmetry: put closer at -2.0%, call at +5.0% → ratio exactly 2.5 → 偏多开阔."""
+        # cd=5.0, pd=2.0 → max/min = 5.0/2.0 = 2.5 ≥ ASYMMETRY_RATIO → asymmetric
+        # cd > pd → put is closer → "偏多开阔"
+        result = compute._asymmetry({"distance_pct": 5.0}, {"distance_pct": -2.0})
+        self.assertEqual(result, "偏多开阔")
+
+    def test_empty_payload_thin_wall_false(self):
+        """Empty contracts → no walls → thin_wall is False."""
+        out = compute.compute(make_raw(contracts=[]))
+        self.assertFalse(out["read_states"]["thin_wall"])
+
 
 if __name__ == "__main__":
     unittest.main()
