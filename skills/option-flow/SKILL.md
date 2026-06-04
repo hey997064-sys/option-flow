@@ -121,6 +121,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/option_flow.py" <SYMBOL.US>
 - **不重复数值列**（PCR 行不要写"0.791"）
 - **不指明事件类型**
 - **不出现 backwardation / contango / vega / gamma**
+- **PCR 行**：用 `read_states.pcr_read.direction`（偏多/均衡/偏空）+ 分位区间词；若 `pcr_read.divergence=true` 追加 note（如"偏多但避险升温"）。≤15 字。
+- **IV-HV 行**：用 `read_states.iv_regime`——偏贵→"偏贵，卖方占优"／合理→"定价合理"／偏便宜→"偏便宜，买方占优"。≤15 字。
 
 ### §3 关键水位（ASCII 纯模板 + LLM 状态读法 bullet）
 
@@ -175,6 +177,7 @@ LLM 末句要求：
 - 解读 IV 期限结构含义（近端凸 / 远端均衡 / 全段紧张等）
 - **只描述现象、不指明事件类型**（不说"财报 / FOMC / CPI / 关税"）
 - 不出现 backwardation / contango / humped / flat 专业词
+- **末句必须含 regime→策略桥**：用 `read_states.iv_regime` 给一句操作倾向——偏贵→"卖方收权利金占优，裸买追单吃亏"；偏便宜→"买方占优，做多波动率划算"；合理→"买卖双方均衡，方向比波动率更重要"。（仍不指事件类型，不用 gamma 词）
 
 `iv_peak = None` 时：第一行改"无明显近期 IV 凸点（近端与远端 IV 接近）"，末句改"IV 期限结构平稳，市场无近期事件溢价。"（**约 15 字，不必扩写到 30 字**——降级场景没有可展开的内容，扩写会注水）
 

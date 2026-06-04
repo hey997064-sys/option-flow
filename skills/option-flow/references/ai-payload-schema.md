@@ -130,8 +130,8 @@ term_structure:
 | 段落 | 关键字段 |
 |---|---|
 | **header** | `symbol` · `data_as_of` · `pcr_latest_date` · `data_quality.{is_intraday, pcr_lag_days, reliable, active_strikes}` |
-| **§1 定调** | `current_price` · `kpi.{pcr_oi, pcr_30d_rank_pct, iv_hv_spread_pp}` · `key_levels.{call_wall, put_wall}.strike` · `term_structure.iv_peak`（若非 None）|
-| **§2 KPI 表** | `kpi.*`（全部）· `key_levels.max_pain.{strike, distance_pct}` · `key_levels.{call,put}_wall.{strike, distance_pct}` |
+| **§1 定调** | `current_price` · `kpi.{pcr_oi, pcr_30d_rank_pct, iv_hv_spread_pp}` · `key_levels.{call_wall, put_wall}.strike` · `term_structure.iv_peak`（若非 None）· `read_states.{pcr_read, iv_regime}` |
+| **§2 KPI 表** | `kpi.*`（全部）· `key_levels.max_pain.{strike, distance_pct}` · `key_levels.{call,put}_wall.{strike, distance_pct}` · `read_states.{pcr_read, iv_regime}` |
 | **§3 关键水位** | `current_price` · `key_levels.oi_distribution.*` · `key_levels.{call,put}_wall.*` · `key_levels.max_pain.*` · `read_states.*` · `data_quality.max_strike_oi_wan` |
 | **§4 IV 视角** | `term_structure.{iv_peak, iv_near, iv_far}` |
 | **§5 策略推荐** | 方向句：`kpi.{pcr_oi, pcr_30d_rank_pct}` · `current_price` · `key_levels.{call,put}_wall.{strike, distance_pct}` · `key_levels.max_pain.strike`<br>卡片表：`key_levels.{call_wall, put_wall, max_pain}.strike`（Strike 仅可取自这 3 个字段）· `key_levels.{deep_supports, deep_resistances}`（可作目标价参考）· `kpi.iv_hv_spread_pp`（理由列 IV 贵贱判断，可选）<br>期限说明 & 免责语：**模板段，不绑定字段** |
@@ -150,5 +150,7 @@ term_structure:
 | `thin_wall` | true / false | 任一墙薄 → §3 必出薄墙 caveat 行 |
 | `max_pain_pull` | `{side:上方/下方/重合, is_noise:bool}` / null | side=Max Pain 相对现价；is_noise=薄 OI |
 | `structure_label` | 5 值之一 / null | 纯墙几何分类，§3 结构判定行直接引用，**禁改名/自创** |
+| `iv_regime` | 偏贵 / 合理 / 偏便宜 | 偏贵=卖方占优 / 偏便宜=买方占优；§2 IV−HV 行 + §4 末句 + §5 排序消费 |
+| `pcr_read` | `{direction:偏多/均衡/偏空, divergence:bool, note:避险升温/看空降温/""}` | §1 方向 + §2 PCR 行消费；direction 由 pcr_oi 绝对值，note 为与分位背离 |
 
 `structure_label` 5 值：天花板紧贴·下方真空 / 地板紧贴·上方开阔 / 双墙紧夹·窄震荡 / 双墙宽松·区间漂移 / null（任一墙缺失）。

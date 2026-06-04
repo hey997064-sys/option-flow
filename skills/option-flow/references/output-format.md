@@ -113,8 +113,8 @@
   - 不重复数值列内容（PCR 含义列不要写"0.791"）
   - 不指明事件类型
   - 不出现 backwardation / contango / vega / gamma
-  - PCR 行：引用 7 档分位区间词（"30 日新低 / 低位 / 中下位 / 中位 / 中上位 / 高位 / 新高"，详见 SKILL.md PCR 分位描述对照表）
-  - IV-HV 行：贵 / 合理 / 便宜 + 一句操作含义（"做多波动率不便宜"）
+  - **PCR 行**：用 `read_states.pcr_read.direction`（偏多/均衡/偏空）+ 分位区间词；若 `pcr_read.divergence=true` 追加 note（如"偏多但避险升温"）。≤15 字。
+  - **IV-HV 行**：用 `read_states.iv_regime`——偏贵→"偏贵，卖方占优"／合理→"定价合理"／偏便宜→"偏便宜，买方占优"。≤15 字。
 - **HV 行的含义列固定**：`过去 30 个交易日实际波动`（不让 LLM 改写）
 
 **小盘股 / 流动性差标的 PCR 分位 caveat**：`pcr_30d_rank_pct` 算法用严格小于比较，遇 PCR 序列窄 / 相同值多的标的，rank 数字会偏低且不敏感。`data_quality.reliable = false` 时，含义列附加一句「⚠️ 流动性较低，分位仅供参考」让读者知情，不要把 rank 当强信号引用。详见 SKILL.md。
@@ -145,6 +145,7 @@
 - 解读 IV 期限结构含义（近端凸 / 远端均衡 / 全段紧张等）
 - **只描述现象，不指明事件类型**（不说"财报 / FOMC / CPI / 关税"）
 - **不出现** backwardation / contango / humped / flat 专业词
+- **末句必须含 regime→策略桥**：用 `read_states.iv_regime` 给一句操作倾向——偏贵→"卖方收权利金占优，裸买追单吃亏"；偏便宜→"买方占优，做多波动率划算"；合理→"买卖双方均衡，方向比波动率更重要"。（仍不指事件类型，不用 gamma 词）
 
 ## §5 详细约束（卡片表格式 · LLM 写）
 
