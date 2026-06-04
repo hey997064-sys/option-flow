@@ -72,6 +72,18 @@ def make_contracts_for_expiry(
     return contracts
 
 
+def _walls_payload(*, call_oi: int, put_oi: int,
+                   call_strike: float = 105.0, put_strike: float = 95.0):
+    """Short-bucket contracts producing one call wall (above) + one put wall (below)."""
+    expiry = _expiry_from_dte(7)
+    base = dict(expiry=expiry, days_to_expiry=7, bucket="short",
+                volume=100, implied_volatility=0.30)
+    return [
+        {"type": "call", "strike": call_strike, "open_interest": call_oi, **base},
+        {"type": "put", "strike": put_strike, "open_interest": put_oi, **base},
+    ]
+
+
 def make_raw(
     *,
     contracts: list[dict] | None = None,
@@ -680,6 +692,194 @@ class TestMutationsAreDetected(unittest.TestCase):
                 m_put["strike"], ATM_PRICE,
                 msg="mutation: with flipped side, put_wall lands above current — invariant breach",
             )
+
+
+# -----------------------------------------------------------------------------
+# ⑤ read_states
+# -----------------------------------------------------------------------------
+
+
+class TestReadStates(unittest.TestCase):
+
+    def test_proximity_buckets(self):
+        self.assertEqual(compute._proximity(0.9), "逼近")
+        self.assertEqual(compute._proximity(-2.0), "逼近")   # boundary ≤2 → 逼近
+        self.assertEqual(compute._proximity(3.5), "中等")
+        self.assertEqual(compute._proximity(-5.0), "中等")   # boundary ≤5 → 中等
+        self.assertEqual(compute._proximity(8.0), "远离")
+        self.assertIsNone(compute._proximity(None))
+
+    def test_read_states_present_in_output(self):
+        out = compute.compute(make_raw(contracts=[]))
+        self.assertIn("read_states", out)
+        # No walls in an empty payload → proximity None
+        self.assertIsNone(out["read_states"]["call_wall_proximity"])
+        self.assertIsNone(out["read_states"]["put_wall_proximity"])
+
+    def test_thickness_buckets(self):
+        self.assertEqual(compute._thickness({"oi_wan": 2.6}), "薄")   # < 3.0
+        self.assertEqual(compute._thickness({"oi_wan": 3.0}), "中")   # boundary
+        self.assertEqual(compute._thickness({"oi_wan": 9.9}), "中")
+        self.assertEqual(compute._thickness({"oi_wan": 10.0}), "厚")  # boundary
+        self.assertIsNone(compute._thickness(None))
+
+    def test_asymmetry_bearish_vacuum(self):
+        # call near (+0.9%), put far (-8%) → ceiling tight, floor vacuum
+        cw = {"distance_pct": 0.9}
+        pw = {"distance_pct": -8.0}
+        self.assertEqual(compute._asymmetry(cw, pw), "偏空真空")
+
+    def test_asymmetry_bullish_open(self):
+        # put near (-1%), call far (+9%) → floor tight, upside open
+        self.assertEqual(
+            compute._asymmetry({"distance_pct": 9.0}, {"distance_pct": -1.0}),
+            "偏多开阔",
+        )
+
+    def test_asymmetry_symmetric(self):
+        # 4% vs 6% → ratio 1.5 < 2.5 → 对称
+        self.assertEqual(
+            compute._asymmetry({"distance_pct": 6.0}, {"distance_pct": -4.0}),
+            "对称",
+        )
+
+    def test_asymmetry_none_when_wall_missing(self):
+        self.assertIsNone(compute._asymmetry(None, {"distance_pct": -4.0}))
+
+    def test_thin_wall_flag(self):
+        # Build a payload whose walls are thin (< 3万 OI) and assert thin_wall.
+        out = compute.compute(make_raw(contracts=_walls_payload(
+            call_oi=20000, put_oi=15000)))  # 2.0万 / 1.5万 → both 薄
+        self.assertTrue(out["read_states"]["thin_wall"])
+        self.assertEqual(out["read_states"]["call_wall_thickness"], "薄")
+
+    def test_max_pain_pull_side(self):
+        self.assertEqual(
+            compute._max_pain_pull({"strike": 110.0}, 100.0, 12.0)["side"], "上方")
+        self.assertEqual(
+            compute._max_pain_pull({"strike": 90.0}, 100.0, 12.0)["side"], "下方")
+        self.assertEqual(
+            compute._max_pain_pull({"strike": 100.0}, 100.0, 12.0)["side"], "重合")
+
+    def test_max_pain_pull_noise_flag(self):
+        # max_strike_oi_wan < 3.0 → noise
+        self.assertTrue(compute._max_pain_pull({"strike": 90.0}, 100.0, 2.6)["is_noise"])
+        self.assertFalse(compute._max_pain_pull({"strike": 90.0}, 100.0, 12.0)["is_noise"])
+
+    def test_max_pain_pull_none_when_missing(self):
+        self.assertIsNone(compute._max_pain_pull(None, 100.0, 12.0))
+
+    def test_structure_label_bearish_vacuum(self):
+        self.assertEqual(
+            compute._structure_label(
+                {"distance_pct": 0.9}, {"distance_pct": -8.0}, "偏空真空"),
+            "天花板紧贴·下方真空")
+
+    def test_structure_label_bullish_open(self):
+        self.assertEqual(
+            compute._structure_label(
+                {"distance_pct": 9.0}, {"distance_pct": -1.0}, "偏多开阔"),
+            "地板紧贴·上方开阔")
+
+    def test_structure_label_tight_range(self):
+        # symmetric, both within 5% → 窄震荡
+        self.assertEqual(
+            compute._structure_label(
+                {"distance_pct": 1.5}, {"distance_pct": -2.0}, "对称"),
+            "双墙紧夹·窄震荡")
+
+    def test_structure_label_loose_drift(self):
+        # symmetric, one wall 远离 (>5%) → 区间漂移
+        self.assertEqual(
+            compute._structure_label(
+                {"distance_pct": 7.0}, {"distance_pct": -6.0}, "对称"),
+            "双墙宽松·区间漂移")
+
+    def test_structure_label_none_when_wall_missing(self):
+        self.assertIsNone(
+            compute._structure_label(None, {"distance_pct": -4.0}, None))
+
+    def test_structure_label_integration_nok_like(self):
+        # call wall +0.9% thin, put wall -8% thin → 偏空真空 structure
+        out = compute.compute(make_raw(
+            current_price=16.85,
+            contracts=_walls_payload(
+                call_oi=26000, put_oi=17000,
+                call_strike=17.0, put_strike=15.5)))
+        rs = out["read_states"]
+        self.assertEqual(rs["structure_label"], "天花板紧贴·下方真空")
+        self.assertTrue(rs["thin_wall"])
+        self.assertEqual(rs["call_wall_proximity"], "逼近")
+
+    def test_one_wall_thin_call_only(self):
+        """Only a thin call wall present (no put contracts) → thin_wall True, put_wall_thickness None."""
+        expiry = _expiry_from_dte(7)
+        contracts = [
+            {
+                "type": "call", "strike": 105.0, "expiry": expiry,
+                "days_to_expiry": 7, "bucket": "short",
+                "open_interest": 20000,  # 2.0万 → 薄
+                "volume": 10, "implied_volatility": 0.30,
+            }
+        ]
+        out = compute.compute(make_raw(contracts=contracts))
+        rs = out["read_states"]
+        self.assertTrue(rs["thin_wall"])
+        self.assertIsNone(rs["put_wall_thickness"])
+
+    def test_asymmetry_exact_boundary(self):
+        """_asymmetry: put closer at -2.0%, call at +6.0% → ratio 3.0 ≥ 2.5 AND call far (6>5) → 偏多开阔."""
+        # cd=6.0, pd=2.0 → ratio 3.0 ≥ ASYMMETRY_RATIO; cd > pd (put closer); cd=6 > PROXIMITY_MID_PCT=5 → 偏多开阔
+        # (Previously used call=5.0 which is NOT >5, so the old inputs would now return "对称" under new rule.)
+        result = compute._asymmetry({"distance_pct": 6.0}, {"distance_pct": -2.0})
+        self.assertEqual(result, "偏多开阔")
+
+    def test_asymmetry_near_walls_not_vacuum(self):
+        """Regression: ratio ≥ 2.5 but far side not truly far → 对称, not 真空/开阔."""
+        # SPY: call +0.1%, put -0.6% → ratio 6, but put 0.6 < 5 → 对称
+        spy_result = compute._asymmetry({"distance_pct": 0.1}, {"distance_pct": -0.6})
+        self.assertEqual(spy_result, "对称", "SPY near-walls must not be labeled 偏空真空")
+        # NVDA: call +0.1%, put -2.2% → ratio 22, but put 2.2 < 5 → 对称
+        nvda_result = compute._asymmetry({"distance_pct": 0.1}, {"distance_pct": -2.2})
+        self.assertEqual(nvda_result, "对称", "NVDA near-walls must not be labeled 偏空真空")
+
+    def test_empty_payload_thin_wall_false(self):
+        """Empty contracts → no walls → thin_wall is False."""
+        out = compute.compute(make_raw(contracts=[]))
+        self.assertFalse(out["read_states"]["thin_wall"])
+
+    def test_iv_regime_buckets(self):
+        self.assertEqual(compute._iv_regime(8.7), "偏贵")
+        self.assertEqual(compute._iv_regime(3.0), "偏贵")    # boundary ≥3
+        self.assertEqual(compute._iv_regime(0.0), "合理")
+        self.assertEqual(compute._iv_regime(-3.0), "偏便宜")  # boundary ≤-3
+        self.assertIsNone(compute._iv_regime(None))
+
+    def test_pcr_read_direction(self):
+        self.assertEqual(compute._pcr_read(0.277, 93.1)["direction"], "偏多")
+        self.assertEqual(compute._pcr_read(1.0, 50.0)["direction"], "均衡")
+        self.assertEqual(compute._pcr_read(2.118, 6.9)["direction"], "偏空")
+        self.assertIsNone(compute._pcr_read(None, None))
+
+    def test_pcr_read_divergence(self):
+        # call-dominant (偏多) but rank high → 避险升温
+        d = compute._pcr_read(0.277, 93.1)
+        self.assertTrue(d["divergence"])
+        self.assertEqual(d["note"], "避险升温")
+        # put-dominant (偏空) but rank low → 看空降温
+        d2 = compute._pcr_read(2.118, 6.9)
+        self.assertTrue(d2["divergence"])
+        self.assertEqual(d2["note"], "看空降温")
+        # aligned → no divergence
+        d3 = compute._pcr_read(0.5, 30.0)
+        self.assertFalse(d3["divergence"])
+        self.assertEqual(d3["note"], "")
+
+    def test_phase2_fields_in_output(self):
+        out = compute.compute(make_raw(contracts=[]))
+        rs = out["read_states"]
+        self.assertIn("iv_regime", rs)
+        self.assertIn("pcr_read", rs)
 
 
 if __name__ == "__main__":
