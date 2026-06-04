@@ -26,8 +26,8 @@
 | 30D ATM IV | **{atm_iv_pct:.1f}%** | {LLM ≤15 字} |
 | HV (30D) | **{hv_pct:.1f}%** | 过去 30 个交易日实际波动 |
 | IV − HV | **{iv_hv_spread_pp:+.1f}pp** | {LLM ≤15 字} |
-| Max Pain | **${max_pain.strike:.0f}** | 距现价 {max_pain.distance_pct:+.1f}% |
-| Call/Put Wall | **${call_wall.strike:.0f} / ${put_wall.strike:.0f}** | {call_wall.distance_pct:+.1f}% / {put_wall.distance_pct:+.1f}% |
+| Max Pain | **${max_pain.strike}** | 距现价 {max_pain.distance_pct:+.1f}% |
+| Call/Put Wall | **${call_wall.strike} / ${put_wall.strike}** | {call_wall.distance_pct:+.1f}% / {put_wall.distance_pct:+.1f}% |
 
 ## §3 关键水位
 
@@ -111,7 +111,7 @@
 ## §2 详细约束（数值列模板 + LLM 含义列）
 
 - **必须用 markdown 表格**；行顺序固定（PCR → 30D IV → HV → IV-HV → Max Pain → Wall），不可调
-- **数值列**：用 `**bold**` 包裹关键数字；格式严格按 `ai-payload-schema.md` 单位约定（`_pct` → `%`，`_pp` → `+/-N.Npp`，`strike` → `${value:.0f}`）
+- **数值列**：用 `**bold**` 包裹关键数字；格式严格按 `ai-payload-schema.md` 单位约定（`_pct` → `%`，`_pp` → `+/-N.Npp`，`strike` → 整数去小数点（`$240`），非整数保留一位小数（`$15.5`）；禁四舍五入归整）
 - **含义列约束**：
   - **≤ 15 字**
   - 不重复数值列内容（PCR 含义列不要写"0.791"）
@@ -142,7 +142,7 @@
 
 **iv_peak = None 降级**：
 - 第 1 行改：`- **近端最紧张**：无明显近期 IV 凸点（近端与远端 IV 接近）`
-- 末句改：`→ IV 期限结构平稳，市场无近期事件溢价。`
+- 末句改：`→ IV 期限结构平稳，市场无近期事件溢价；` + regime bridge（基于 `read_states.iv_regime`：偏贵→"卖方收权利金占优"；偏便宜→"买方占优，做多波动率划算"；合理→"定价合理，方向比波动率更重要"）。约 20-30 字。
 - 第 2、3 行保持不变
 
 **LLM 末句要求**：
