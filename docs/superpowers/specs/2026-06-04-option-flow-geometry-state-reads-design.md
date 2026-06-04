@@ -42,20 +42,25 @@ Phase 1 需要的字段（§3 消费）：
 | `call_wall.proximity` | `逼近` / `中等` / `远离` | `\|call_wall.distance_pct\|`：≤2% 逼近，2–5% 中等，>5% 远离 |
 | `put_wall.proximity` | `逼近` / `中等` / `远离` | `\|put_wall.distance_pct\|` 同上 |
 | `asymmetry` | `对称` / `偏空真空` / `偏多开阔` | 一侧墙距 ≥ 2.5× 另一侧 → 近端侧定调；call 近 put 远=偏空真空，put 近 call 远=偏多开阔；否则对称 |
-| `wall_thickness` | `厚` / `中` / `薄` | 按 `oi_wan` 绝对量：≥10 万 厚，3–10 万 中，<3 万 薄（OI 量级 = 机制强度，诚实口径）。对 call/put 各算，取整体偏薄者标记结构降级 |
-| `max_pain_pull` | `{side: 上方/下方/重合, is_noise: bool}` | 现价 vs `max_pain.strike`；薄 OI（`data_quality.max_strike_oi_wan` 低或 thin）标 `is_noise=true` |
-| `structure_label` | 6 类之一（见下） | 由上述状态规则指派，**LLM 不自创、不改名** |
+| `call_wall.thickness` / `put_wall.thickness` | `厚` / `中` / `薄` / `None` | 按各自 `oi_wan` 绝对量：≥10 万 厚，3–10 万 中，<3 万 薄（OI 量级 = 机制强度，诚实口径；<3 万即低于 `WALL_MIN_OI_WAN`=3.0，是 fallback 选出的薄墙）。墙缺失为 None |
+| `thin_wall` | `bool` | 任一存在的墙 thickness=`薄` → true。**独立加性标记**，驱动 §3 caveat 行，不进 structure_label |
+| `max_pain_pull` | `{side: 上方/下方/重合, is_noise: bool}` | side=`max_pain.strike` 相对现价位置（高于现价=上方）；`is_noise = data_quality.max_strike_oi_wan < 3.0` |
+| `structure_label` | 5 类之一 / `None`（见下） | 由**纯墙几何**（proximity + asymmetry）规则指派，**LLM 不自创、不改名** |
 
-`structure_label` 取值（小而封闭，规则驱动→可复现）：
+`structure_label` 取值（Phase 1 = 纯墙几何，小而封闭、规则驱动→可复现）：
 
-- `天花板紧贴·下方真空`（call 逼近 + asymmetry=偏空真空）
-- `地板紧贴·上方开阔`（put 逼近 + asymmetry=偏多开阔）
-- `双墙紧夹·窄震荡`（双墙 逼近/中等 + 对称）
-- `双墙宽松·区间漂移`（双墙 远离）
-- `单边强多` / `单边强空`（PCR 绝对值极值且方向一致；PCR 为次要输入，仅此类用到）
-- `薄墙·水位失真`（wall_thickness=薄 主导 → 兜底降级，水位仅供参考）
+- `天花板紧贴·下方真空`（asymmetry = 偏空真空）
+- `地板紧贴·上方开阔`（asymmetry = 偏多开阔）
+- `双墙紧夹·窄震荡`（对称 + 双墙均 逼近/中等，或混合但无 远离）
+- `双墙宽松·区间漂移`（对称 + 任一墙 远离）
+- `None`（任一墙缺失 → 交由 §3 Wall 缺失路径处理）
 
-指派优先级：薄墙降级 > 单边强多/空 > 对称性结构（紧贴/真空/开阔/紧夹/宽松）。规则边界用真实数据测（模式 H）。
+指派规则（确定性，仅依赖 call/put proximity + asymmetry）：
+1. 任一墙缺失 → `None`
+2. asymmetry=偏空真空 → 天花板紧贴·下方真空；asymmetry=偏多开阔 → 地板紧贴·上方开阔
+3. 对称：任一墙 `远离` → 双墙宽松·区间漂移；否则 → 双墙紧夹·窄震荡
+
+**PCR 驱动的 `单边强多/空`、`薄墙·水位失真` 不进 Phase 1 structure_label**——前者属 §1 方向（Phase 2），后者由 `thin_wall` 加性标记承担。规则边界用真实数据测（模式 H）。
 
 ### 4.2 §3 关键水位段升级
 
