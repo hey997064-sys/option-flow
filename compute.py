@@ -87,6 +87,15 @@ IV_PEAK_TRIGGER_RATIO = 1.3 # peak must be >= iv_far * 1.3 to qualify
 HV_TRADING_DAYS = 30
 HV_REQUIRED_CLOSES = HV_TRADING_DAYS + 1  # 31 closes → 30 returns
 
+# iv_regime (Phase 2) — IV贵贱分档阈值（百分点）。
+IV_RICH_PP = 3.0            # iv_hv_spread_pp ≥ +3pp → 偏贵；≤ −3pp → 偏便宜；之间 合理
+
+# pcr_read (Phase 2) — PCR 方向 + 分位背离阈值。
+PCR_BULL_MAX = 0.8          # pcr_oi < 0.8 → 偏多(Call主导)
+PCR_BEAR_MIN = 1.2          # pcr_oi > 1.2 → 偏空(Put主导)；之间 均衡
+PCR_RANK_HIGH = 80.0        # 分位 ≥ 此值算相对高位
+PCR_RANK_LOW = 20.0         # 分位 ≤ 此值算相对低位
+
 
 # -----------------------------------------------------------------------------
 # 入口
@@ -176,7 +185,7 @@ def compute(raw_payload: dict) -> dict:
     )
 
     read_states = _read_states(
-        current_price, call_wall, put_wall, max_pain, data_quality,
+        current_price, call_wall, put_wall, max_pain, data_quality, kpi,
     )
 
     return {
@@ -984,14 +993,49 @@ def _structure_label(
     return "双墙紧夹·窄震荡"
 
 
+def _iv_regime(iv_hv_spread_pp: float | None) -> str | None:
+    """IV−HV 贵贱：≥+3pp 偏贵(卖方占优) / ≤−3pp 偏便宜(买方占优) / 之间 合理。"""
+    if iv_hv_spread_pp is None:
+        return None
+    if iv_hv_spread_pp >= IV_RICH_PP:
+        return "偏贵"
+    if iv_hv_spread_pp <= -IV_RICH_PP:
+        return "偏便宜"
+    return "合理"
+
+
+def _pcr_read(pcr_oi: float | None, rank_pct: float | None) -> dict | None:
+    """PCR 方向（绝对值 vs 1.0）+ 与 30 日分位的背离。任一缺失 → None。
+
+    direction: <0.8 偏多(Call 主导) / >1.2 偏空(Put 主导) / 之间 均衡
+    divergence: 偏多 但分位高(≥80) → 避险升温；偏空 但分位低(≤20) → 看空降温
+    """
+    if pcr_oi is None:
+        return None
+    if pcr_oi < PCR_BULL_MAX:
+        direction = "偏多"
+    elif pcr_oi > PCR_BEAR_MIN:
+        direction = "偏空"
+    else:
+        direction = "均衡"
+    note = ""
+    if rank_pct is not None:
+        if direction == "偏多" and rank_pct >= PCR_RANK_HIGH:
+            note = "避险升温"
+        elif direction == "偏空" and rank_pct <= PCR_RANK_LOW:
+            note = "看空降温"
+    return {"direction": direction, "divergence": bool(note), "note": note}
+
+
 def _read_states(
     current_price: float,
     call_wall: dict | None,
     put_wall: dict | None,
     max_pain: dict | None,
     data_quality: dict,
+    kpi: dict,
 ) -> dict:
-    """key_levels + data_quality → 几何状态。无新数据、无 IO。"""
+    """key_levels + data_quality + kpi → 几何状态。无新数据、无 IO。"""
     asymmetry = _asymmetry(call_wall, put_wall)
     call_thick = _thickness(call_wall)
     put_thick = _thickness(put_wall)
@@ -1005,6 +1049,8 @@ def _read_states(
         "max_pain_pull": _max_pain_pull(
             max_pain, current_price, data_quality.get("max_strike_oi_wan")),
         "structure_label": _structure_label(call_wall, put_wall, asymmetry),
+        "iv_regime": _iv_regime(kpi.get("iv_hv_spread_pp")),
+        "pcr_read": _pcr_read(kpi.get("pcr_oi"), kpi.get("pcr_30d_rank_pct")),
     }
 
 

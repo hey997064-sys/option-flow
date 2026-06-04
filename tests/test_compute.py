@@ -848,6 +848,39 @@ class TestReadStates(unittest.TestCase):
         out = compute.compute(make_raw(contracts=[]))
         self.assertFalse(out["read_states"]["thin_wall"])
 
+    def test_iv_regime_buckets(self):
+        self.assertEqual(compute._iv_regime(8.7), "偏贵")
+        self.assertEqual(compute._iv_regime(3.0), "偏贵")    # boundary ≥3
+        self.assertEqual(compute._iv_regime(0.0), "合理")
+        self.assertEqual(compute._iv_regime(-3.0), "偏便宜")  # boundary ≤-3
+        self.assertIsNone(compute._iv_regime(None))
+
+    def test_pcr_read_direction(self):
+        self.assertEqual(compute._pcr_read(0.277, 93.1)["direction"], "偏多")
+        self.assertEqual(compute._pcr_read(1.0, 50.0)["direction"], "均衡")
+        self.assertEqual(compute._pcr_read(2.118, 6.9)["direction"], "偏空")
+        self.assertIsNone(compute._pcr_read(None, None))
+
+    def test_pcr_read_divergence(self):
+        # call-dominant (偏多) but rank high → 避险升温
+        d = compute._pcr_read(0.277, 93.1)
+        self.assertTrue(d["divergence"])
+        self.assertEqual(d["note"], "避险升温")
+        # put-dominant (偏空) but rank low → 看空降温
+        d2 = compute._pcr_read(2.118, 6.9)
+        self.assertTrue(d2["divergence"])
+        self.assertEqual(d2["note"], "看空降温")
+        # aligned → no divergence
+        d3 = compute._pcr_read(0.5, 30.0)
+        self.assertFalse(d3["divergence"])
+        self.assertEqual(d3["note"], "")
+
+    def test_phase2_fields_in_output(self):
+        out = compute.compute(make_raw(contracts=[]))
+        rs = out["read_states"]
+        self.assertIn("iv_regime", rs)
+        self.assertIn("pcr_read", rs)
+
 
 if __name__ == "__main__":
     unittest.main()
