@@ -753,6 +753,22 @@ class TestReadStates(unittest.TestCase):
         self.assertTrue(out["read_states"]["thin_wall"])
         self.assertEqual(out["read_states"]["call_wall_thickness"], "薄")
 
+    def test_max_pain_pull_side(self):
+        self.assertEqual(
+            compute._max_pain_pull({"strike": 110.0}, 100.0, 12.0)["side"], "上方")
+        self.assertEqual(
+            compute._max_pain_pull({"strike": 90.0}, 100.0, 12.0)["side"], "下方")
+        self.assertEqual(
+            compute._max_pain_pull({"strike": 100.0}, 100.0, 12.0)["side"], "重合")
+
+    def test_max_pain_pull_noise_flag(self):
+        # max_strike_oi_wan < 3.0 → noise
+        self.assertTrue(compute._max_pain_pull({"strike": 90.0}, 100.0, 2.6)["is_noise"])
+        self.assertFalse(compute._max_pain_pull({"strike": 90.0}, 100.0, 12.0)["is_noise"])
+
+    def test_max_pain_pull_none_when_missing(self):
+        self.assertIsNone(compute._max_pain_pull(None, 100.0, 12.0))
+
 
 if __name__ == "__main__":
     unittest.main()

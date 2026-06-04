@@ -932,6 +932,24 @@ def _asymmetry(call_wall: dict | None, put_wall: dict | None) -> str | None:
     return "对称"
 
 
+def _max_pain_pull(
+    max_pain: dict | None,
+    current_price: float,
+    max_strike_oi_wan: float | None,
+) -> dict | None:
+    """Max Pain 相对现价的引力方向 + 是否薄 OI 噪音。max_pain 缺失 → None。"""
+    if not max_pain:
+        return None
+    strike = max_pain["strike"]
+    if abs(strike - current_price) < 1e-9:
+        side = "重合"
+    elif strike > current_price:
+        side = "上方"
+    else:
+        side = "下方"
+    return {"side": side, "is_noise": (max_strike_oi_wan or 0) < WALL_MIN_OI_WAN}
+
+
 def _read_states(
     current_price: float,
     call_wall: dict | None,
@@ -949,7 +967,8 @@ def _read_states(
         "call_wall_thickness": call_thick,
         "put_wall_thickness": put_thick,
         "thin_wall": "薄" in (call_thick, put_thick),
-        "max_pain_pull": None,
+        "max_pain_pull": _max_pain_pull(
+            max_pain, current_price, data_quality.get("max_strike_oi_wan")),
         "structure_label": None,
     }
 
