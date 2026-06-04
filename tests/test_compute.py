@@ -828,11 +828,20 @@ class TestReadStates(unittest.TestCase):
         self.assertIsNone(rs["put_wall_thickness"])
 
     def test_asymmetry_exact_boundary(self):
-        """_asymmetry: put closer at -2.0%, call at +5.0% → ratio exactly 2.5 → 偏多开阔."""
-        # cd=5.0, pd=2.0 → max/min = 5.0/2.0 = 2.5 ≥ ASYMMETRY_RATIO → asymmetric
-        # cd > pd → put is closer → "偏多开阔"
-        result = compute._asymmetry({"distance_pct": 5.0}, {"distance_pct": -2.0})
+        """_asymmetry: put closer at -2.0%, call at +6.0% → ratio 3.0 ≥ 2.5 AND call far (6>5) → 偏多开阔."""
+        # cd=6.0, pd=2.0 → ratio 3.0 ≥ ASYMMETRY_RATIO; cd > pd (put closer); cd=6 > PROXIMITY_MID_PCT=5 → 偏多开阔
+        # (Previously used call=5.0 which is NOT >5, so the old inputs would now return "对称" under new rule.)
+        result = compute._asymmetry({"distance_pct": 6.0}, {"distance_pct": -2.0})
         self.assertEqual(result, "偏多开阔")
+
+    def test_asymmetry_near_walls_not_vacuum(self):
+        """Regression: ratio ≥ 2.5 but far side not truly far → 对称, not 真空/开阔."""
+        # SPY: call +0.1%, put -0.6% → ratio 6, but put 0.6 < 5 → 对称
+        spy_result = compute._asymmetry({"distance_pct": 0.1}, {"distance_pct": -0.6})
+        self.assertEqual(spy_result, "对称", "SPY near-walls must not be labeled 偏空真空")
+        # NVDA: call +0.1%, put -2.2% → ratio 22, but put 2.2 < 5 → 对称
+        nvda_result = compute._asymmetry({"distance_pct": 0.1}, {"distance_pct": -2.2})
+        self.assertEqual(nvda_result, "对称", "NVDA near-walls must not be labeled 偏空真空")
 
     def test_empty_payload_thin_wall_false(self):
         """Empty contracts → no walls → thin_wall is False."""

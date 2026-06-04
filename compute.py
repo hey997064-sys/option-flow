@@ -917,10 +917,14 @@ def _thickness(wall: dict | None) -> str | None:
 
 
 def _asymmetry(call_wall: dict | None, put_wall: dict | None) -> str | None:
-    """墙距对称度。一侧 ≥ 2.5× 另一侧 → 不对称（近端定调）。任一墙缺失 → None。
+    """墙距对称度。一侧 ≥ 2.5× 另一侧 **且远端墙 |distance_pct| > 5%** → 不对称。任一墙缺失 → None。
 
     call 近 put 远 → 偏空真空（天花板压顶、下方踩空）
     put 近 call 远 → 偏多开阔（地板托底、上方开阔）
+
+    Bug fix（2026-06-04）: 仅检查 ratio ≥ 2.5 时会误判两侧都紧贴的情形。
+    例：SPY call +0.1% / put -0.6% → ratio 6 触发旧规则，但 put 并非真空。
+    修复：额外要求"远端墙 |distance_pct| > PROXIMITY_MID_PCT（5%）"才算真正的真空/开阔。
     """
     if not call_wall or not put_wall:
         return None
@@ -928,7 +932,12 @@ def _asymmetry(call_wall: dict | None, put_wall: dict | None) -> str | None:
     pd = abs(put_wall["distance_pct"])
     lo = min(cd, pd) or 0.01           # 防御性除零（_near_wall 保证 distance≠0，此处仅兜底）
     if max(cd, pd) / lo >= ASYMMETRY_RATIO:
-        return "偏空真空" if cd < pd else "偏多开阔"
+        if cd < pd:
+            # call 近 put 远：put 必须真正远离（> 5%）才算真空
+            return "偏空真空" if pd > PROXIMITY_MID_PCT else "对称"
+        else:
+            # put 近 call 远：call 必须真正远离（> 5%）才算开阔
+            return "偏多开阔" if cd > PROXIMITY_MID_PCT else "对称"
     return "对称"
 
 
