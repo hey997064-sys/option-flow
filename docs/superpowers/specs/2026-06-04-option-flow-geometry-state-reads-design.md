@@ -41,7 +41,7 @@ Phase 1 需要的字段（§3 消费）：
 |---|---|---|
 | `call_wall.proximity` | `逼近` / `中等` / `远离` | `\|call_wall.distance_pct\|`：≤2% 逼近，2–5% 中等，>5% 远离 |
 | `put_wall.proximity` | `逼近` / `中等` / `远离` | `\|put_wall.distance_pct\|` 同上 |
-| `asymmetry` | `对称` / `偏空真空` / `偏多开阔` | 一侧墙距 ≥ 2.5× 另一侧 → 近端侧定调；call 近 put 远=偏空真空，put 近 call 远=偏多开阔；否则对称 |
+| `asymmetry` | `对称` / `偏空真空` / `偏多开阔` | 一侧墙距 ≥ 2.5× 另一侧 **且远侧确为 `远离`（\|dist\|>5%）** → 近端侧定调：call 近 put 远=偏空真空，put 近 call 远=偏多开阔；否则对称。**远侧必须真远**——否则两墙都贴脸时比值虽大却被误判（真实数据：SPY call +0.1% / put −0.6% 非真空；NVDA put −2.2% 非真空）。模式 H 边界 |
 | `call_wall.thickness` / `put_wall.thickness` | `厚` / `中` / `薄` / `None` | 按各自 `oi_wan` 绝对量：≥10 万 厚，3–10 万 中，<3 万 薄（OI 量级 = 机制强度，诚实口径；<3 万即低于 `WALL_MIN_OI_WAN`=3.0，是 fallback 选出的薄墙）。墙缺失为 None |
 | `thin_wall` | `bool` | 任一存在的墙 thickness=`薄` → true。**独立加性标记**，驱动 §3 caveat 行，不进 structure_label |
 | `max_pain_pull` | `{side: 上方/下方/重合, is_noise: bool}` | side=`max_pain.strike` 相对现价位置（高于现价=上方）；`is_noise = data_quality.max_strike_oi_wan < 3.0` |
