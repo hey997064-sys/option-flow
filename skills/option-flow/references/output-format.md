@@ -14,7 +14,9 @@
 
 ## §1 今日定调
 
-{LLM 写 120-180 字 · 串联方向 + 期权定价 + Wall 区间 + iv_peak（如有），末句必须是交易主线}
+**【{read_states.structure_label}】**
+
+{LLM 写 120-180 字 · 必须串联：方向（pcr_read.direction + 分位词）+ 期权定价（iv_regime + iv_hv_spread_pp）+ 结构含义（structure_label 几何含义）+ iv_peak（如有），末句必须是交易主线}
 
 ## §2 KPI 仪表盘
 
@@ -100,8 +102,10 @@
 
 详见 SKILL.md「§1 今日定调」一节。要点速记：
 
-- 必须串联：**方向**（多 / 空 / 中性 + 数字依据）→ **期权定价**（iv_hv_spread_pp + 贵 / 合理 / 便宜）→ **Wall 区间含义**（call/put_wall 与现价位置）→ **iv_peak 凸点描述**（若非 None，只描述现象不指事件）
-- **末句必须是交易主线**："破 \$X 看 \$Y" / "等回踩 \$Z 再判断" / "事件前不入场" 等
+- **首行必须是加粗结构标签行**：`**【{read_states.structure_label}】**`（禁改名；任一墙缺失改写"核心关注 Max Pain"）
+- 必须串联：**方向**（`pcr_read.direction` + 若 divergence 加 note + 数字依据 PCR 绝对值 + 分位词）→ **期权定价**（`iv_regime` + `iv_hv_spread_pp` 数字）→ **结构含义**（structure_label 几何含义，点出现价 vs Wall 的不对称/紧贴/真空）→ **iv_peak 凸点描述**（若非 None，只描述现象不指事件）
+- **禁用通用开场**"夹在…之间 / 现价位于…区间"——必须以结构标签开场
+- **末句必须是交易主线**："站上 \$X 看 \$Y" / "失守 \$Z 直奔真空带" / "事件前不入场" 等
 - 禁用清单见 `hard-rules.md §3`
 
 ## §2 详细约束（数值列模板 + LLM 含义列）
