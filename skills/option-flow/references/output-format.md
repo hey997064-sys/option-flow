@@ -155,10 +155,7 @@
 
 **结构**（方向句 + 候选策略表 + 期限说明 + 免责语）。
 
-**方向句**：
-- ≤ 50 字
-- 一句话依据 = PCR 分位 + Wall 距离 + 价格相对 Max Pain 三个维度综合
-- 方向枚举：做多 / 做空 / 中性偏多 / 中性偏空 / 中性震荡
+**方向句**：keyed to `read_states.structure_label` + `pcr_read.direction`——结构定基调（天花板紧贴·下方真空→中性偏空；地板紧贴·上方开阔→中性偏多；双墙紧夹→中性震荡；双墙宽松→跟随突破），PCR 微调。≤ 50 字。
 
 **候选策略表**：4 列固定（偏好 / 工具 / Strike / 理由）：
 
@@ -167,9 +164,15 @@
 | 偏好 | 示例：卖方 / 偏多 / 偏空 / 中性震荡 / 持股增收 / 持股对冲。如 IV 偏贵优先放卖方 |
 | 工具 | 见下方「可推荐工具表」，**不在表内的工具禁用**（IC / Butterfly 因 strike 不够禁用） |
 | Strike | **必须严格来自 ai_payload 的 3 个 strike**：`call_wall.strike` / `put_wall.strike` / `max_pain.strike`。Strangle / Spread 用「$X Put + $Y Call」格式。深度集群只能当目标价提一句，不能当 strike 推荐 |
-| 理由 | ≤ 25 字，给出"为什么这个策略对应当前画像" |
+| 理由 | ≤ 25 字，**用具名打法**（禁泛泛"突破看涨"）：把策略绑定到当前结构/水位，如「天花板压顶·冲高 fade」/ 「失守支撑·真空下挫」/ 「区间两头收权利金」/ 「突破跟随」 |
 
 **表行数**：3-4 行候选即可，不要强行填满。
+
+**IV 排序**：`read_states.iv_regime=偏贵` → 卖方策略（卖 Strangle / 备兑）放表首；偏便宜 → 买方策略放表首。
+
+**caveat 绑定**（必须显式）：
+- `read_states.thin_wall=true` → 表末加一行注："⚠️ 墙薄，strike 仅作参考，轻仓。"
+- `read_states.max_pain_pull.is_noise=true` → 不要用 Max Pain 作为策略 strike（薄 OI 噪音）。
 
 **可推荐工具表**（受 3 strike 上限约束）：
 
