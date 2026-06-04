@@ -33,10 +33,12 @@
 {ASCII 双向蝴蝶图}
 \`\`\`
 
-- 上方阻力 **${call_wall.strike}**（Call Wall）：Call OI **{call_wall.oi_wan} 万张**，距现价 **{call_wall.distance_pct:+.1f}%**
-- 下方支撑 **${put_wall.strike}**（Put Wall）：Put OI **{put_wall.oi_wan} 万张**，距现价 **{put_wall.distance_pct:+.1f}%**
-- Max Pain **${max_pain.strike}** 引力中枢，距现价 **{max_pain.distance_pct:+.1f}%**
-- 深度支撑：{deep_supports[]} · 深度阻力：{deep_resistances[]} （任一为空时省略该方向）
+- **上方阻力 ${call_wall.strike}** · 现价{call_wall_proximity}（{call_wall.distance_pct:+.1f}%）→ {状态读法}；持仓 **{call_wall.oi_wan} 万张**
+- **下方支撑 ${put_wall.strike}** · 现价{put_wall_proximity}（{put_wall.distance_pct:+.1f}%）→ {状态读法}；持仓 **{put_wall.oi_wan} 万张**
+- **Max Pain ${max_pain.strike}** 引力中枢（{max_pain_pull.side}，{max_pain.distance_pct:+.1f}%）
+- **结构判定**：{read_states.structure_label} = {一句方向含义}
+- 深度支撑 / 阻力：{deep_supports[] · deep_resistances[]，任一为空省略}
+- （thin_wall 时）⚠️ 单 strike 最大持仓仅 {max_strike_oi_wan} 万张，墙薄、引力弱，仅供参考
 
 ## §4 波动率视角
 
@@ -116,13 +118,16 @@
 
 **小盘股 / 流动性差标的 PCR 分位 caveat**：`pcr_30d_rank_pct` 算法用严格小于比较，遇 PCR 序列窄 / 相同值多的标的，rank 数字会偏低且不敏感。`data_quality.reliable = false` 时，含义列附加一句「⚠️ 流动性较低，分位仅供参考」让读者知情，不要把 rank 当强信号引用。详见 SKILL.md。
 
-## §3 详细约束（纯模板）
+## §3 详细约束（ASCII 纯模板 + LLM 状态读法 bullet）
 
-- **ASCII 蝴蝶图**：绘制规则见 `ascii-butterfly-template.md`，必须用三反引号代码块包裹（确保等宽字体）
-- **4 行 bullet**：模板填充，**不是 LLM 写**
-  - bullet 1 / 2 / 3：Call Wall / Put Wall / Max Pain（行内 `**bold**` 强调 strike / OI / distance_pct 三个数字）
-  - bullet 4：深度集群——`deep_supports` 非空时列出每个 `{strike} (OI {oi_wan}万, {distance_pct:+.1f}%)`，逗号分隔；`deep_resistances` 同上；两边都空则省略整条 bullet
-- Max Pain 缺失则跳过第 3 行 bullet
+- **ASCII 蝴蝶图**：绘制规则见 `ascii-butterfly-template.md`，必须用三反引号代码块包裹（确保等宽字体）；compute 预渲染，LLM 不画不抄
+- **bullet（LLM 写，消费 `read_states`）**：共 4-6 行，按实际情况裁剪：
+  - bullet 1 / 2：Call Wall / Put Wall — 含 proximity 状态 + 状态读法 + OI 持仓（按 SKILL.md proximity → 读法对照表选词）
+  - bullet 3：Max Pain — 含 `max_pain_pull.side` + distance_pct（与 Wall 重合时补注）
+  - bullet 4：**结构判定** — 直接引用 `read_states.structure_label`（5 值，禁改名）
+  - bullet 5：深度支撑 / 阻力（任一为空省略）
+  - bullet 6：thin_wall caveat（仅 `read_states.thin_wall=true` 时输出）
+- Max Pain 缺失则跳过 bullet 3；任一墙缺失（structure_label=null）跳过结构判定行；走 Wall 缺失细则
 
 **Wall vs 深度集群的区别**（v2 算法 2026-05-24 上线）：Wall = 现价近端支撑/阻力（同侧距 cp 最近、OI ≥ 3 万），日内交易级；深度集群 = Wall 之外的远端集中点（OI ≥ 5 万），趋势级。
 
@@ -203,7 +208,7 @@
 | header | 1-4 行 | 标题 + 日期 +（条件 banner） | 模板 |
 | §1 | 120-180 字 | 方向 + 定价 + Wall + 凸点 + 交易主线 | LLM |
 | §2 | ~80 字（含表格） | 6 行 KPI 表 | 模板 + LLM 含义列 |
-| §3 | ASCII + ~80 字 | 蝴蝶图 + 4 行 bullet（含深度集群）| 纯模板 |
+| §3 | ASCII + ~100 字 | 蝴蝶图 + 状态读法 bullet（Wall × 2 + Max Pain + 结构判定 + 深度集群 + thin_wall caveat）| ASCII 纯模板，bullet LLM |
 | §4 | ~80 字 | 3 行 IV 数据 + 末句 | 模板 + LLM 末句 |
 | §5 | 120-180 字 + 表 + 期限 + 免责 | 方向 + 候选策略卡片表 | LLM |
 | **合计** | **~500-650 字 + ASCII 蝴蝶图 + 策略表** | 阅读 ≤ 3 分钟 | — |

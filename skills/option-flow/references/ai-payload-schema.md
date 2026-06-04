@@ -132,10 +132,23 @@ term_structure:
 | **header** | `symbol` · `data_as_of` · `pcr_latest_date` · `data_quality.{is_intraday, pcr_lag_days, reliable, active_strikes}` |
 | **§1 定调** | `current_price` · `kpi.{pcr_oi, pcr_30d_rank_pct, iv_hv_spread_pp}` · `key_levels.{call_wall, put_wall}.strike` · `term_structure.iv_peak`（若非 None）|
 | **§2 KPI 表** | `kpi.*`（全部）· `key_levels.max_pain.{strike, distance_pct}` · `key_levels.{call,put}_wall.{strike, distance_pct}` |
-| **§3 关键水位** | `current_price` · `key_levels.oi_distribution.*` · `key_levels.{call,put}_wall.*` · `key_levels.max_pain.*` |
+| **§3 关键水位** | `current_price` · `key_levels.oi_distribution.*` · `key_levels.{call,put}_wall.*` · `key_levels.max_pain.*` · `read_states.*` · `data_quality.max_strike_oi_wan` |
 | **§4 IV 视角** | `term_structure.{iv_peak, iv_near, iv_far}` |
 | **§5 策略推荐** | 方向句：`kpi.{pcr_oi, pcr_30d_rank_pct}` · `current_price` · `key_levels.{call,put}_wall.{strike, distance_pct}` · `key_levels.max_pain.strike`<br>卡片表：`key_levels.{call_wall, put_wall, max_pain}.strike`（Strike 仅可取自这 3 个字段）· `key_levels.{deep_supports, deep_resistances}`（可作目标价参考）· `kpi.iv_hv_spread_pp`（理由列 IV 贵贱判断，可选）<br>期限说明 & 免责语：**模板段，不绑定字段** |
 
 ## 降级规则速查
 
 字段缺失 / 为 None / 异常时的处理详见 **SKILL.md「错误降级」表**（这是 SoT，避免多处漂移）。本文件只负责字段契约（哪些必填、哪些可选、单位是什么），不重复降级后果。
+
+## read_states（几何状态派生 · §3 消费）
+
+| 字段 | 取值 | 含义 |
+|---|---|---|
+| `call_wall_proximity` / `put_wall_proximity` | 逼近 / 中等 / 远离 / null | 现价距该墙：≤2% 逼近 / ≤5% 中等 / >5% 远离 |
+| `asymmetry` | 对称 / 偏空真空 / 偏多开阔 / null | 偏空真空=天花板贴、下方远；偏多开阔=地板贴、上方远 |
+| `call_wall_thickness` / `put_wall_thickness` | 厚 / 中 / 薄 / null | <3万 薄 / [3,10)万 中 / ≥10万 厚 |
+| `thin_wall` | true / false | 任一墙薄 → §3 必出薄墙 caveat 行 |
+| `max_pain_pull` | `{side:上方/下方/重合, is_noise:bool}` / null | side=Max Pain 相对现价；is_noise=薄 OI |
+| `structure_label` | 5 值之一 / null | 纯墙几何分类，§3 结构判定行直接引用，**禁改名/自创** |
+
+`structure_label` 5 值：天花板紧贴·下方真空 / 地板紧贴·上方开阔 / 双墙紧夹·窄震荡 / 双墙宽松·区间漂移 / null（任一墙缺失）。

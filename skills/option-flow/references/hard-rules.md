@@ -152,3 +152,14 @@ LLM 可填的开放位（参考 SKILL.md）：
 8.4 **免责声明在最末尾，固定文案**：`⚠️ 基于公开期权链聚合，不构成投资建议。`不允许修改或省略。
 
 8.5 **header symbol 去 .US 后缀**（视觉简洁，"NVDA.US" → "NVDA"），但 ai_payload 内部一律保留全 ticker。
+
+## 机制叙事 · OI 口径护栏（§3 状态读法）
+
+本产品的水位口径是 **持仓量（OI）**，不是做市商 gamma。机制叙事只能用 OI 语言：
+> 持仓集中在某 strike → 做市商日常对冲调仓量大 → 调仓时搬动股价 → 形成引力 / 阻力 / 支撑；持仓薄 → 调仓量小 → 引力弱。
+
+**禁用词**（gamma 口径，会误导且我们无此数据）：做市商 gamma / GEX / Gamma Flip / Zero Gamma / vanna / charm / 负 gamma / 正 gamma regime。
+
+**禁止伪造** regime 拐点价位（如"波动率触发位""零 gamma 位"）——我们没有该数据。
+
+`structure_label` 由 compute 指派，LLM **不自创、不改名、不新增类别**；机制方向措辞从简，只说"持仓集中处形成引力/阻力/支撑"，不展开做市商 delta 对冲方向细节（易写反）。

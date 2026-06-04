@@ -88,7 +88,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/option_flow.py" <SYMBOL.US>
 |---|---|---|
 | §1 今日定调 | **LLM**（最关键） | 120-180 字 |
 | §2 KPI 表 | 数值列模板 + **LLM 含义列**（每行 ≤ 15 字） | — |
-| §3 ASCII 蝴蝶图 + 3 bullet | 纯模板（paste `ascii` 字段） | — |
+| §3 ASCII 蝴蝶图 + 状态读法 bullet | ASCII 纯模板 + **LLM 状态读法**（消费 `read_states`） | — |
 | §4 IV 视角 | 前 3 行模板 + **LLM 末句** | 末句 30-60 字 |
 | §5 策略推荐 | **LLM** | 120-180 字 + 固定免责语 |
 
@@ -122,16 +122,29 @@ python3 "${CLAUDE_PLUGIN_ROOT}/option_flow.py" <SYMBOL.US>
 - **不指明事件类型**
 - **不出现 backwardation / contango / vega / gamma**
 
-### §3 关键水位（纯模板 · 无 LLM）
+### §3 关键水位（ASCII 纯模板 + LLM 状态读法 bullet）
 
-**直接 paste `key_levels.oi_distribution.ascii` 字段，整段包在 ` ``` ` 代码块里**。compute.py 已按 `references/ascii-butterfly-template.md` 规则预渲染，**禁止 LLM 手画或抄数**——LLM 抄 158 行 OI 实测会大概率错位。
+**ASCII**：直接 paste `key_levels.oi_distribution.ascii`，整段包在代码块里（compute 预渲染，LLM 不画不抄）。
 
-蝴蝶图代码块下面紧跟 bullet：
-- 上方阻力 **${call_wall.strike}**（Call Wall）：Call OI **{call_wall.oi_wan} 万张**，距现价 **{call_wall.distance_pct:+.1f}%**
-- 下方支撑 **${put_wall.strike}**（Put Wall）：Put OI **{put_wall.oi_wan} 万张**，距现价 **{put_wall.distance_pct:+.1f}%**
-- Max Pain **${max_pain.strike}** 引力中枢，距现价 **{max_pain.distance_pct:+.1f}%**
-- **深度支撑**（如 `deep_supports` 非空）：列出每个 `{strike} (OI {oi_wan}万, {distance_pct:+.1f}%)`，逗号分隔；为空时省略该 bullet
-- **深度阻力**（如 `deep_resistances` 非空）：同上格式；为空时省略
+**bullet（LLM 写，消费 `read_states`）**：从"报数字"升级为「水位 + 现价相对状态 + 状态读法 + OI 机制」。每条骨架：
+
+- **上方阻力 ${call_wall.strike}** · 现价{call_wall_proximity}（{call_wall.distance_pct:+.1f}%）→ {按 proximity 选读法}；持仓 {call_wall.oi_wan} 万张。
+- **下方支撑 ${put_wall.strike}** · 现价{put_wall_proximity}（{put_wall.distance_pct:+.1f}%）→ {按 proximity 选读法}；持仓 {put_wall.oi_wan} 万张。
+- **Max Pain ${max_pain.strike}** 引力中枢（{max_pain_pull.side}，{max_pain.distance_pct:+.1f}%）{若与某 Wall 同 strike 补"与 X Wall 重合"}。
+- **结构判定**：{structure_label} = {一句话方向含义，如"偏空压顶（非震荡）"}。
+- 深度支撑 / 阻力：{deep_supports / deep_resistances 非空时列出，为空省略}。
+- {若 `read_states.thin_wall = true`}：⚠️ 单 strike 最大持仓仅 {data_quality.max_strike_oi_wan} 万张，墙薄、引力弱，仅供参考。
+
+**proximity → 读法对照**：
+| proximity | 读法 |
+|---|---|
+| 逼近（≤2%） | "最高信号区"：持仓集中、冲高/杀跌易停滞回落；给前向触发"站上/失守 $X 才转向" |
+| 中等（2-5%） | 该位是可达的近端目标/阻力，描述到位的空间 |
+| 远离（>5%） | 强调"现价到该墙之间是 N% 无持仓真空 / 缓冲带"，失守/突破后无支撑/无压力 |
+
+**机制句**：OI 口径——持仓集中→做市商调仓量大→搬动股价→引力；薄则弱。**禁 gamma 措辞**（见 hard-rules）。
+
+**结构判定行**：直接引用 `read_states.structure_label`（5 值，禁改名）。任一墙缺失（label=null）走 Wall 缺失细则，不写结构判定行。
 
 **Wall vs 深度集群的区别**（v2 算法 2026-05-24 上线）：
 - Wall = 现价**近端**支撑/阻力（同侧距 cp 最近、OI ≥ 3 万的 strike），日内交易级
