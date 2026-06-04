@@ -904,6 +904,34 @@ def _proximity(distance_pct: float | None) -> str | None:
     return "远离"
 
 
+def _thickness(wall: dict | None) -> str | None:
+    """墙厚 = OI 量级（机制强度）：<3万 薄 / [3,10)万 中 / ≥10万 厚。None → None。"""
+    if not wall:
+        return None
+    oi = wall["oi_wan"]
+    if oi < WALL_MIN_OI_WAN:
+        return "薄"
+    if oi < WALL_THICK_WAN:
+        return "中"
+    return "厚"
+
+
+def _asymmetry(call_wall: dict | None, put_wall: dict | None) -> str | None:
+    """墙距对称度。一侧 ≥ 2.5× 另一侧 → 不对称（近端定调）。任一墙缺失 → None。
+
+    call 近 put 远 → 偏空真空（天花板压顶、下方踩空）
+    put 近 call 远 → 偏多开阔（地板托底、上方开阔）
+    """
+    if not call_wall or not put_wall:
+        return None
+    cd = abs(call_wall["distance_pct"])
+    pd = abs(put_wall["distance_pct"])
+    lo = min(cd, pd) or 0.01           # 防除零；一侧贴现价时视为极不对称
+    if max(cd, pd) / lo >= ASYMMETRY_RATIO:
+        return "偏空真空" if cd < pd else "偏多开阔"
+    return "对称"
+
+
 def _read_states(
     current_price: float,
     call_wall: dict | None,
@@ -912,13 +940,15 @@ def _read_states(
     data_quality: dict,
 ) -> dict:
     """key_levels + data_quality → 几何状态。无新数据、无 IO。"""
+    call_thick = _thickness(call_wall)
+    put_thick = _thickness(put_wall)
     return {
         "call_wall_proximity": _proximity(call_wall["distance_pct"]) if call_wall else None,
         "put_wall_proximity": _proximity(put_wall["distance_pct"]) if put_wall else None,
-        "asymmetry": None,
-        "call_wall_thickness": None,
-        "put_wall_thickness": None,
-        "thin_wall": False,
+        "asymmetry": _asymmetry(call_wall, put_wall),
+        "call_wall_thickness": call_thick,
+        "put_wall_thickness": put_thick,
+        "thin_wall": "薄" in (call_thick, put_thick),
         "max_pain_pull": None,
         "structure_label": None,
     }

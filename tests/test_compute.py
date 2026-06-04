@@ -72,6 +72,18 @@ def make_contracts_for_expiry(
     return contracts
 
 
+def _walls_payload(*, call_oi: int, put_oi: int,
+                   call_strike: float = 105.0, put_strike: float = 95.0):
+    """Short-bucket contracts producing one call wall (above) + one put wall (below)."""
+    expiry = _expiry_from_dte(7)
+    base = dict(expiry=expiry, days_to_expiry=7, bucket="short",
+                volume=100, implied_volatility=0.30)
+    return [
+        {"type": "call", "strike": call_strike, "open_interest": call_oi, **base},
+        {"type": "put", "strike": put_strike, "open_interest": put_oi, **base},
+    ]
+
+
 def make_raw(
     *,
     contracts: list[dict] | None = None,
@@ -703,6 +715,43 @@ class TestReadStates(unittest.TestCase):
         # No walls in an empty payload → proximity None
         self.assertIsNone(out["read_states"]["call_wall_proximity"])
         self.assertIsNone(out["read_states"]["put_wall_proximity"])
+
+    def test_thickness_buckets(self):
+        self.assertEqual(compute._thickness({"oi_wan": 2.6}), "薄")   # < 3.0
+        self.assertEqual(compute._thickness({"oi_wan": 3.0}), "中")   # boundary
+        self.assertEqual(compute._thickness({"oi_wan": 9.9}), "中")
+        self.assertEqual(compute._thickness({"oi_wan": 10.0}), "厚")  # boundary
+        self.assertIsNone(compute._thickness(None))
+
+    def test_asymmetry_bearish_vacuum(self):
+        # call near (+0.9%), put far (-8%) → ceiling tight, floor vacuum
+        cw = {"distance_pct": 0.9}
+        pw = {"distance_pct": -8.0}
+        self.assertEqual(compute._asymmetry(cw, pw), "偏空真空")
+
+    def test_asymmetry_bullish_open(self):
+        # put near (-1%), call far (+9%) → floor tight, upside open
+        self.assertEqual(
+            compute._asymmetry({"distance_pct": 9.0}, {"distance_pct": -1.0}),
+            "偏多开阔",
+        )
+
+    def test_asymmetry_symmetric(self):
+        # 4% vs 6% → ratio 1.5 < 2.5 → 对称
+        self.assertEqual(
+            compute._asymmetry({"distance_pct": 6.0}, {"distance_pct": -4.0}),
+            "对称",
+        )
+
+    def test_asymmetry_none_when_wall_missing(self):
+        self.assertIsNone(compute._asymmetry(None, {"distance_pct": -4.0}))
+
+    def test_thin_wall_flag(self):
+        # Build a payload whose walls are thin (< 3万 OI) and assert thin_wall.
+        out = compute.compute(make_raw(contracts=_walls_payload(
+            call_oi=20000, put_oi=15000)))  # 2.0万 / 1.5万 → both 薄
+        self.assertTrue(out["read_states"]["thin_wall"])
+        self.assertEqual(out["read_states"]["call_wall_thickness"], "薄")
 
 
 if __name__ == "__main__":
