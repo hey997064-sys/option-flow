@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sys
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
@@ -143,6 +143,63 @@ class TestSymbolGuard(unittest.TestCase):
             with self.assertRaises(ValueError):
                 fetch.fetch("600519.SH")
             mock_cli.assert_not_called()
+
+
+# -----------------------------------------------------------------------------
+# ⑤ Entitlement-gated empty quote  (root-cause of "抓不了" misdiagnosis)
+# -----------------------------------------------------------------------------
+
+class TestEmptyQuoteEntitlement(unittest.TestCase):
+    """When the account lacks US-options quote entitlement, ``option quote``
+    returns ``[]`` (request SUCCEEDS, broker just returns no rows) for every
+    contract. The chain steps still work, so we have OCC symbols to query.
+
+    fetch() must raise a CLIError whose message NAMES the entitlement
+    hypothesis — otherwise a downstream AI re-misdiagnoses it as an OCC-format
+    / code bug (the original ClawBot failure). The discriminating signature is
+    ``contracts == 0 and failed_chunks == 0``: every quote request succeeded
+    but returned nothing.
+    """
+
+    def _fake_cli(self, expiry_iso):
+        def side_effect(args, **kwargs):
+            # step 1: chain (no --date) → expiry list
+            if args[:2] == ["option", "chain"] and "--date" not in args:
+                return [{"expiry_date": expiry_iso}]
+            # step 2a: kline → current_price + closes (old dates, never "today")
+            if args[0] == "kline":
+                return [
+                    {"time": "2026-05-01 00:00:00", "close": "200.0"},
+                    {"time": "2026-05-02 00:00:00", "close": "200.0"},
+                ]
+            # step 2b: option volume daily → pcr (unused, guard fires first)
+            if args[:3] == ["option", "volume", "daily"]:
+                return {"stats": []}
+            # step 4: chain --date → strikes near ATM (price=200, ±15% window)
+            if args[:2] == ["option", "chain"] and "--date" in args:
+                return [{"strike": str(s)} for s in (190, 195, 200, 205, 210)]
+            # step 6: quote → [] = entitlement gate (success, no rows)
+            if args[:2] == ["option", "quote"]:
+                return []
+            raise AssertionError(f"unexpected CLI args: {args}")
+        return side_effect
+
+    def test_empty_quote_raises_entitlement_hint(self):
+        # Expiry 5 calendar days out → always inside the short (0-14d) window,
+        # independent of the wall clock when the test runs.
+        et_today = datetime.now(ET).date()
+        expiry_iso = (et_today + timedelta(days=5)).isoformat()
+
+        with patch.object(fetch, "_run_cli", side_effect=self._fake_cli(expiry_iso)):
+            with self.assertRaises(fetch.CLIError) as cm:
+                fetch.fetch("NVDA.US")
+
+        msg = str(cm.exception)
+        # Must point at the real cause (options market-data entitlement)...
+        self.assertIn("权限", msg)
+        # ...and explicitly absolve the OCC format, so no AI re-walks the
+        # ClawBot path of "fix" the encoding.
+        self.assertIn("格式", msg)
 
 
 if __name__ == "__main__":

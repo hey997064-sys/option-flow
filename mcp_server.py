@@ -94,4 +94,12 @@ def option_flow_report(symbol: str = "") -> str:
 
 
 if __name__ == "__main__":
+    import sys
+
+    # 自检：`python mcp_server.py --check` 把隐性前置依赖逐项暴露，
+    # 不进 MCP 事件循环。用户接入前 / 换账号后跑一次即可。
+    if "--check" in sys.argv:
+        from doctor import run as _run_doctor
+        sys.exit(_run_doctor())
+
     mcp.run()
