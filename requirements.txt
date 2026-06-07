@@ -1,0 +1,2 @@
+# MCP server 依赖（仅 mcp_server.py 需要；数据层 fetch.py/compute.py 是纯标准库）
+mcp[cli]>=1.27
