@@ -628,6 +628,22 @@ def fetch(symbol: str) -> dict:
     # for, the payload is unreliable — better to fail loudly than to ship a
     # report based on a partial chain.
     if len(contracts) < QUOTE_COVERAGE_MIN_RATIO * len(occ_to_meta):
+        # Discriminate the entitlement case from a transport failure. When the
+        # chain steps succeeded (occ_to_meta is non-empty), NO quote request
+        # errored (failed_chunks == 0), yet zero contracts came back, the most
+        # likely cause is the account lacking US-options quote entitlement —
+        # `option quote` then returns [] (success, no rows) rather than failing.
+        # This is NOT an OCC-format bug: the encoding is verified against live
+        # CLI output. Spell that out so a downstream AI doesn't re-misdiagnose
+        # it as a symbol-format problem and "fix" working code.
+        if len(contracts) == 0 and failed_chunks == 0:
+            raise CLIError(
+                f"{symbol}: option chain 能取到合约，但 option quote 对全部 "
+                f"{len(occ_to_meta)} 个合约都返回空（请求成功、0/{total_chunks} chunk 失败）。"
+                f"最可能是账号未开通美股期权行情权限（LV1/LV2）——"
+                f"请检查 longbridge 账号的期权行情权限。"
+                f"这与 OCC 符号格式无关（编码已对 live CLI 实测验证），请勿修改符号格式。"
+            )
         raise CLIError(
             f"{symbol}: option quote coverage too low — got {len(contracts)}/"
             f"{len(occ_to_meta)} contracts ("

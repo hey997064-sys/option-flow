@@ -61,39 +61,33 @@ META 的全 chain OI（12.2 万张）其实跟 AAPL 持平，但因股价高、s
 
 option-flow 在这种情况下走拒绝路径——告诉散户"近月数据撑不起这套分析"，而不是给一份"看起来专业但其实没意义"的报告。
 
-## 安装
+## 安装与使用
 
-前置：
+option-flow 在本机用你自己登录的 longbridge 账号拉数据（不经任何第三方服务器）。两种用法任选：
 
-- Python 3.8+
-- [longbridge CLI](https://open.longbridge.com/) 安装好并 `longbridge auth login` 登录
-- [Claude Code](https://claude.ai/code) 安装好
+### 用法一：Claude Desktop / 任意 MCP 客户端（开箱即用）
 
-步骤：
+前置：Python 3.9+、[longbridge CLI](https://open.longbridge.com/) 已 `longbridge auth login` 登录。
 
 ```bash
 git clone <repo> option-flow
 cd option-flow
+./install.sh
 ```
 
-验证（在 Claude Code 里）：
+`install.sh` 会建 venv、装依赖、跑自检，并按本机实际位置把 option-flow 写进 Claude Desktop 配置（备份原文件、保留你已有的其它 MCP server）。**重启 Claude Desktop**，对它说「option flow NVDA」即可出报告。
 
-```
-分析下 SPY 的期权聪明钱
-```
+> 想自查环境随时跑 `.venv/bin/python mcp_server.py --check`——逐项体检 longbridge 是否找到 / 已登录 / 数据是否可取，缺哪一环直接告诉你怎么补。
+> Cursor 等其它 MCP 客户端的接入见 [docs/MCP.md](docs/MCP.md)。
 
-或直接 slash command：
+### 用法二：Claude Code 插件
 
-```
-/option-flow SPY.US
-```
+前置：[Claude Code](https://claude.ai/code) 已安装。clone 本仓后：
 
-## 用法
+- 自然语言：「分析下 SPY 期权聪明钱」、「NVDA option flow」、「看看 QQQ 在押什么」
+- Slash command：`/option-flow <SYMBOL.US>`，例 `/option-flow SPY.US`
 
-- 安装：`/plugin install option-flow@<marketplace>`（注册到 marketplace 后；本仓即标准插件结构）
-- Slash command：`/option-flow <SYMBOL.US>` 例 `/option-flow SPY.US`
-- 自然语言：「分析下 SPY 期权聪明钱」、「NVDA option flow」、「看看 QQQ 期权聪明钱在押什么」等
-- 生产入口 `option_flow.py`（fetch→compute→stdout，零落盘）；`run.py` 仅 dev 调试用
+> 生产入口 `option_flow.py`（fetch→compute→stdout，零落盘）；`run.py` 仅 dev 调试用。
 
 ## 输出样例（NVDA 节选）
 
@@ -137,7 +131,7 @@ NVDA 散户偏多但 IV 已含溢价。PCR **0.791** 处于 **30 日新低**，C
 python3 -m unittest discover tests -v
 ```
 
-78 tests 覆盖：算法不变量（Wall 方向、Max Pain 算法身份、IV 中位口径、HV 30d 严格 31 closes、PCR lag clamp）+ `read_states` 几何派生（proximity / asymmetry 真空边界 / 墙薄厚 / structure_label / iv_regime / pcr_read 背离）+ Mutation tests（每条不变量配反例确认 validator 真能抓 bug）+ Fetch 层 OCC 编码 / DTE 分桶 / US 市场守卫 + 生产入口 `option_flow.py` 编排、零落盘、非美股优雅降级（exit 5）不变量。
+88 tests 覆盖：算法不变量（Wall 方向、Max Pain 算法身份、IV 中位口径、HV 30d 严格 31 closes、PCR lag clamp）+ `read_states` 几何派生（proximity / asymmetry 真空边界 / 墙薄厚 / structure_label / iv_regime / pcr_read 背离）+ Mutation tests（每条不变量配反例确认 validator 真能抓 bug）+ Fetch 层 OCC 编码 / DTE 分桶 / US 市场守卫 + 生产入口 `option_flow.py` 编排、零落盘、非美股优雅降级（exit 5）不变量 + 权限缺失报错点名（区别于格式问题）+ doctor 自检三岔判定（权限 / 字段 / 正常）+ install.sh 配置合并安全契约（绝不覆盖用户已有 server / preferences）。
 
 ## 数据口径
 
@@ -149,7 +143,7 @@ python3 -m unittest discover tests -v
 ## 局限
 
 - 仅支持美股（`.US` 后缀）
-- **目前仅支持在 Claude Code 上运行**——Cursor / ChatGPT / Claude Desktop / 其他 MCP-compatible client 暂不支持（依赖 Claude Code 插件 / skills 约定与 `${CLAUDE_PLUGIN_ROOT}`，这是 Claude Code 私有）
+- 支持 Claude Code（插件）与任意 MCP 客户端（Claude Desktop / Cursor 等，经内置 MCP server）；两条路都在本机用你自己的 longbridge 账号运行
 - 流动性低的标的会拒绝出报告（这是设计——避免向散户输出可信度低的画像）
 - LLM 输出仍有语义误判风险（散户当参考、不构成投资建议）
 - 期权风险显著高于股票现货，请谨慎评估自身风险承受能力
