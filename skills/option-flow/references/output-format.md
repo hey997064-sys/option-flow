@@ -26,8 +26,8 @@
 | 30D ATM IV | **{atm_iv_pct:.1f}%** | {LLM ≤15 字} |
 | HV (30D) | **{hv_pct:.1f}%** | 过去 30 个交易日实际波动 |
 | IV − HV | **{iv_hv_spread_pp:+.1f}pp** | {LLM ≤15 字} |
-| Max Pain | **${max_pain.strike}** | 距现价 {max_pain.distance_pct:+.1f}% |
-| Call/Put Wall | **${call_wall.strike} / ${put_wall.strike}** | {call_wall.distance_pct:+.1f}% / {put_wall.distance_pct:+.1f}% |
+| Max Pain | **\${max_pain.strike}** | 距现价 {max_pain.distance_pct:+.1f}% |
+| Call/Put Wall | **\${call_wall.strike} / \${put_wall.strike}** | {call_wall.distance_pct:+.1f}% / {put_wall.distance_pct:+.1f}% |
 
 ## §3 关键水位
 
@@ -35,11 +35,11 @@
 {ASCII 双向蝴蝶图}
 \`\`\`
 
-- **上方阻力 ${call_wall.strike}** · 现价{call_wall_proximity}（{call_wall.distance_pct:+.1f}%）→ {状态读法}；持仓 **{call_wall.oi_wan} 万张**
-- **下方支撑 ${put_wall.strike}** · 现价{put_wall_proximity}（{put_wall.distance_pct:+.1f}%）→ {状态读法}；持仓 **{put_wall.oi_wan} 万张**
-- **Max Pain ${max_pain.strike}** 引力中枢（{max_pain_pull.side}，{max_pain.distance_pct:+.1f}%[，与 X Wall 重合]）{若 `read_states.max_pain_pull.is_noise = true` 行末补"（薄 OI，引力信号弱，仅供参考）"}
+- **上方阻力 \${call_wall.strike}** · 现价{call_wall_proximity}（{call_wall.distance_pct:+.1f}%）→ {状态读法}；持仓 **{call_wall.oi_wan} 万张**
+- **下方支撑 \${put_wall.strike}** · 现价{put_wall_proximity}（{put_wall.distance_pct:+.1f}%）→ {状态读法}；持仓 **{put_wall.oi_wan} 万张**
+- **Max Pain \${max_pain.strike}** 引力中枢（{max_pain_pull.side}，{max_pain.distance_pct:+.1f}%[，与 X Wall 重合]）{若 `read_states.max_pain_pull.is_noise = true` 行末补"（薄 OI，引力信号弱，仅供参考）"}
 - **结构判定**：{read_states.structure_label} = {一句方向含义}
-- **深度支撑**（deep_supports 非空时）：逐个列 `${strike}（{oi_wan} 万张，{distance_pct:+.1f}%）`，逗号分隔，一行写完；为空省略
+- **深度支撑**（deep_supports 非空时）：逐个列 `\${strike}（{oi_wan} 万张，{distance_pct:+.1f}%）`，逗号分隔，一行写完；为空省略
 - **深度阻力**（deep_resistances 非空时）：同格式；为空省略
 - （read_states.thin_wall 时）⚠️ 单 strike 最大持仓仅 {data_quality.max_strike_oi_wan} 万张，墙薄、引力弱，仅供参考（`thin_wall` 由 compute 判定，LLM 按布尔值直接决定是否出此行）
 
@@ -111,7 +111,7 @@
 ## §2 详细约束（数值列模板 + LLM 含义列）
 
 - **必须用 markdown 表格**；行顺序固定（PCR → 30D IV → HV → IV-HV → Max Pain → Wall），不可调
-- **数值列**：用 `**bold**` 包裹关键数字；格式严格按 `ai-payload-schema.md` 单位约定（`_pct` → `%`，`_pp` → `+/-N.Npp`，`strike` → 整数去小数点（`$240`），非整数保留一位小数（`$15.5`）；禁四舍五入归整）
+- **数值列**：用 `**bold**` 包裹关键数字；格式严格按 `ai-payload-schema.md` 单位约定（`_pct` → `%`，`_pp` → `+/-N.Npp`，`strike` → 整数去小数点（`\$240`），非整数保留一位小数（`\$15.5`）；禁四舍五入归整）
 - **含义列约束**：
   - **≤ 15 字**
   - 不重复数值列内容（PCR 含义列不要写"0.791"）
@@ -130,7 +130,7 @@
   - bullet 1 / 2：Call Wall / Put Wall — 含 proximity 状态 + 状态读法 + OI 持仓（按 SKILL.md proximity → 读法对照表选词）
   - bullet 3：Max Pain — 含 `max_pain_pull.side` + distance_pct；与 Wall 重合时在括号内追加"，与 X Wall 重合"；`is_noise=true` 时行末补"（薄 OI，引力信号弱，仅供参考）"
   - bullet 4：**结构判定** — 直接引用 `read_states.structure_label`（5 值，禁改名；对照句见 SKILL.md structure_label 对照表，不自由发挥）
-  - bullet 5：深度支撑 / 阻力（格式：逐个列 `${strike}（{oi_wan} 万张，{distance_pct:+.1f}%）`，逗号分隔，一行写完；任一为空省略）
+  - bullet 5：深度支撑 / 阻力（格式：逐个列 `\${strike}（{oi_wan} 万张，{distance_pct:+.1f}%）`，逗号分隔，一行写完；任一为空省略）
   - bullet 6：thin_wall caveat（仅 `read_states.thin_wall=true` 时输出；LLM 按布尔值直接决定，不自行评估阈值）
 - Max Pain 缺失则跳过 bullet 3；任一墙缺失（structure_label=null）跳过结构判定行；走 Wall 缺失细则
 
@@ -163,7 +163,7 @@
 |---|---|
 | 偏好 | 示例：卖方 / 偏多 / 偏空 / 中性震荡 / 持股增收 / 持股对冲。如 IV 偏贵优先放卖方 |
 | 工具 | 见下方「可推荐工具表」，**不在表内的工具禁用**（IC / Butterfly 因 strike 不够禁用） |
-| Strike | **必须严格来自 ai_payload 的 3 个 strike**：`call_wall.strike` / `put_wall.strike` / `max_pain.strike`。Strangle / Spread 用「$X Put + $Y Call」格式。深度集群只能当目标价提一句，不能当 strike 推荐 |
+| Strike | **必须严格来自 ai_payload 的 3 个 strike**：`call_wall.strike` / `put_wall.strike` / `max_pain.strike`。Strangle / Spread 用「\$X Put + \$Y Call」格式。深度集群只能当目标价提一句，不能当 strike 推荐 |
 | 理由 | ≤ 25 字，**用具名打法**（禁泛泛"突破看涨"）：把策略绑定到当前结构/水位，如「天花板压顶·冲高 fade」/ 「失守支撑·真空下挫」/ 「区间两头收权利金」/ 「突破跟随」 |
 
 **表行数**：3-4 行候选即可，不要强行填满。
