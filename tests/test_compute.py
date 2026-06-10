@@ -882,5 +882,76 @@ class TestReadStates(unittest.TestCase):
         self.assertIn("pcr_read", rs)
 
 
+# -----------------------------------------------------------------------------
+# _render_butterfly_ascii（§3 ASCII 蝴蝶图渲染）
+# -----------------------------------------------------------------------------
+
+
+def _ascii_line_with(text: str, needle: str) -> str:
+    """Return the first rendered line containing ``needle`` (raises if absent)."""
+    return next(line for line in text.splitlines() if needle in line)
+
+
+class TestRenderButterflyAscii(unittest.TestCase):
+    """渲染规则单元测试（开发期验证；运行期无 validator——用户即 validator）。
+
+    覆盖 2026-06-09 NOK/DRAM 真实数据暴露的 $0.5 间隔边界 case：
+    - 非整数 strike 被 .0f 抹掉小数（13.5→14、59.5→60）产生重复/误导标签
+    - 零 OI 的现价相邻 strike 被强制保留成纯噪音行
+    """
+
+    def test_fractional_strike_label_keeps_one_decimal(self):
+        # NOK 形态：Put Wall $13.5 必须渲染为 $13.5，不得与 $14 同名
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [13.0, 13.5, 14.0, 15.0],
+                "call_oi_wan": [1.7, 0.2, 7.4, 11.5],
+                "put_oi_wan": [1.1, 2.3, 6.3, 2.9],
+            },
+            current_price=13.85,
+            call_wall={"strike": 14.0},
+            put_wall={"strike": 13.5},
+            max_pain={"strike": 14.0},
+        )
+        self.assertIn("$13.5", out)
+        # $13.5 行必须挂 PUT WALL 标注（标签与关键位绑定正确）
+        self.assertIn("● PUT WALL", _ascii_line_with(out, "$13.5"))
+        # 整数 $14 标签只出现一行（修复前 13.5 也渲染成 "$  14" → 2 行）
+        body = [l for l in out.splitlines() if "─────" in l]
+        self.assertEqual(sum("$  14 " in l for l in body), 1)
+
+    def test_integer_strike_label_unchanged(self):
+        # 整数 strike 回归：格式与修复前一致（防误伤）
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [95.0, 100.0, 105.0],
+                "call_oi_wan": [1.2, 3.0, 5.0],
+                "put_oi_wan": [2.0, 1.5, 1.0],
+            },
+            current_price=99.5,
+            call_wall={"strike": 105.0},
+            put_wall={"strike": 95.0},
+            max_pain={"strike": 100.0},
+        )
+        self.assertIn("$ 100", out)
+        self.assertIn("$ 105", out)
+        self.assertNotIn("100.0 ─", out)  # 整数不得带小数渲染
+
+    def test_footer_tick_label_keeps_fraction(self):
+        # cp=99.5 → 主刻度 $2.5（30≤cp<100），footer 不得写成 "$2"
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [95.0, 100.0, 105.0],
+                "call_oi_wan": [1.2, 3.0, 5.0],
+                "put_oi_wan": [2.0, 1.5, 1.0],
+            },
+            current_price=99.5,
+            call_wall={"strike": 105.0},
+            put_wall={"strike": 95.0},
+            max_pain={"strike": 100.0},
+        )
+        self.assertIn("$2.5 整数关口", out)
+
+
 if __name__ == "__main__":
     unittest.main()

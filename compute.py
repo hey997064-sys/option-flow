@@ -543,6 +543,7 @@ def _render_butterfly_ascii(
         cb = bar_str(c)
         pl = f"{p:.1f}"
         cl = f"{c:.1f}万"
+        ks = f"{k:.0f}" if k == int(k) else f"{k:.1f}"  # 单位铁律：整数去小数点、非整数留一位
         tags = []
         if cw is not None and k == cw:
             tags.append("● CALL WALL")
@@ -555,11 +556,11 @@ def _render_butterfly_ascii(
         elif nearby_above is None and selected and k == selected[0][0]:
             tags.append(f"← 现价 ${cp:.2f}")
         tag_str = "  " + "  ".join(tags) if tags else ""
-        return f"            {pl:>5} {pb:<6} ───── ${k:>4.0f} ─────  {cb} {cl}{tag_str}"
+        return f"            {pl:>5} {pb:<6} ───── ${ks:>4} ─────  {cb} {cl}{tag_str}"
 
     output_rows: list[str] = [render_row(k, c, p) for k, c, p in selected]
 
-    tick_label = f"${TICK:.0f}" if TICK >= 1 else f"${TICK:g}"
+    tick_label = f"${TICK:g}"
     lines = [
         f"持仓分布 · ≤14d 多 expiry 合计 · 现价 ${cp:.2f}",
         "",
