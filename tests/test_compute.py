@@ -882,5 +882,174 @@ class TestReadStates(unittest.TestCase):
         self.assertIn("pcr_read", rs)
 
 
+# -----------------------------------------------------------------------------
+# _render_butterfly_ascii（§3 ASCII 蝴蝶图渲染）
+# -----------------------------------------------------------------------------
+
+
+def _ascii_line_with(text: str, needle: str) -> str:
+    """Return the first rendered line containing ``needle`` (raises if absent)."""
+    return next(line for line in text.splitlines() if needle in line)
+
+
+class TestRenderButterflyAscii(unittest.TestCase):
+    """渲染规则单元测试（开发期验证；运行期无 validator——用户即 validator）。
+
+    覆盖 2026-06-09 NOK/DRAM 真实数据暴露的 $0.5 间隔边界 case：
+    - 非整数 strike 被 .0f 抹掉小数（13.5→14、59.5→60）产生重复/误导标签
+    - 零 OI 的现价相邻 strike 被强制保留成纯噪音行
+    """
+
+    def test_fractional_strike_label_keeps_one_decimal(self):
+        # NOK 形态：Put Wall $13.5 必须渲染为 $13.5，不得与 $14 同名
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [13.0, 13.5, 14.0, 15.0],
+                "call_oi_wan": [1.7, 0.2, 7.4, 11.5],
+                "put_oi_wan": [1.1, 2.3, 6.3, 2.9],
+            },
+            current_price=13.85,
+            call_wall={"strike": 14.0},
+            put_wall={"strike": 13.5},
+            max_pain={"strike": 14.0},
+        )
+        self.assertIn("$13.5", out)
+        # $13.5 行必须挂 PUT WALL 标注（标签与关键位绑定正确）
+        self.assertIn("● PUT WALL", _ascii_line_with(out, "$13.5"))
+        # 整数 $14 标签只出现一行（修复前 13.5 也渲染成 "$  14" → 2 行）
+        body = [l for l in out.splitlines() if "─────" in l]
+        self.assertEqual(sum("$  14 " in l for l in body), 1)
+
+    def test_integer_strike_label_unchanged(self):
+        # 整数 strike 回归：格式与修复前一致（防误伤）
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [95.0, 100.0, 105.0],
+                "call_oi_wan": [1.2, 3.0, 5.0],
+                "put_oi_wan": [2.0, 1.5, 1.0],
+            },
+            current_price=99.5,
+            call_wall={"strike": 105.0},
+            put_wall={"strike": 95.0},
+            max_pain={"strike": 100.0},
+        )
+        self.assertIn("$ 100", out)
+        self.assertIn("$ 105", out)
+        self.assertNotIn("100.0 ─", out)  # 整数不得带小数渲染
+
+    def test_footer_tick_label_keeps_fraction(self):
+        # cp=99.5 → 主刻度 $2.5（30≤cp<100），footer 不得写成 "$2"
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [95.0, 100.0, 105.0],
+                "call_oi_wan": [1.2, 3.0, 5.0],
+                "put_oi_wan": [2.0, 1.5, 1.0],
+            },
+            current_price=99.5,
+            call_wall={"strike": 105.0},
+            put_wall={"strike": 95.0},
+            max_pain={"strike": 100.0},
+        )
+        self.assertIn("$2.5 整数关口", out)
+
+    def test_zero_oi_adjacent_strike_dropped(self):
+        # DRAM 形态：现价下方相邻 $59.5 OI 0/0，不得为"相邻"而强制渲染
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [55.0, 59.0, 59.5, 60.0, 65.0],
+                "call_oi_wan": [0.8, 0.3, 0.0, 1.5, 1.9],
+                "put_oi_wan": [1.3, 0.3, 0.0, 0.8, 0.4],
+            },
+            current_price=59.86,
+            call_wall={"strike": 65.0},
+            put_wall={"strike": 55.0},
+            max_pain={"strike": 59.0},
+        )
+        self.assertNotIn("59.5", out)
+        body = [l for l in out.splitlines() if "─────" in l]
+        self.assertEqual(sum("$  60 " in l for l in body), 1)
+        # 箭头在上界行 $60（已展示行中 strike ≥ 59.86 的最小者）
+        self.assertIn("← 现价 $59.86", _ascii_line_with(out, "$  60"))
+
+    def test_arrow_on_upper_bound_row(self):
+        # 现价 99.5 落在 95 与 100 之间 → 箭头标 $100 行（上界行）
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [95.0, 100.0, 105.0],
+                "call_oi_wan": [1.2, 3.0, 5.0],
+                "put_oi_wan": [2.0, 1.5, 1.0],
+            },
+            current_price=99.5,
+            call_wall={"strike": 105.0},
+            put_wall={"strike": 95.0},
+            max_pain={"strike": 100.0},
+        )
+        self.assertIn("← 现价 $99.50", _ascii_line_with(out, "$ 100"))
+
+    def test_arrow_when_price_above_all_rows(self):
+        # 现价高于全部展示行 → 箭头标最顶行
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [50.0, 55.0, 60.0],
+                "call_oi_wan": [1.0, 2.0, 3.0],
+                "put_oi_wan": [1.0, 2.0, 1.5],
+            },
+            current_price=70.0,
+            call_wall=None,
+            put_wall={"strike": 60.0},
+            max_pain={"strike": 55.0},
+        )
+        first_body_line = next(l for l in out.splitlines() if "─────" in l)
+        self.assertIn("← 现价 $70.00", first_body_line)
+
+    def test_arrow_when_price_below_all_rows(self):
+        # 现价低于全部展示行 → 全部行 strike ≥ cp，最小者 = 最底行
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [50.0, 55.0, 60.0],
+                "call_oi_wan": [1.0, 2.0, 3.0],
+                "put_oi_wan": [1.0, 2.0, 1.5],
+            },
+            current_price=45.0,
+            call_wall={"strike": 50.0},
+            put_wall=None,
+            max_pain={"strike": 55.0},
+        )
+        last_body_line = [l for l in out.splitlines() if "─────" in l][-1]
+        self.assertIn("← 现价 $45.00", last_body_line)
+
+    def test_arrow_when_price_equals_displayed_strike(self):
+        # 现价恰好等于某展示行 strike → 箭头标该行（设计文档声明的边界）
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [95.0, 100.0, 105.0],
+                "call_oi_wan": [1.2, 3.0, 5.0],
+                "put_oi_wan": [2.0, 1.5, 1.0],
+            },
+            current_price=100.0,
+            call_wall={"strike": 105.0},
+            put_wall={"strike": 95.0},
+            max_pain={"strike": 100.0},
+        )
+        self.assertIn("← 现价 $100.00", _ascii_line_with(out, "$ 100"))
+
+    def test_arrow_skips_filtered_strike_above_price(self):
+        # 现价正上方的 strike 被 OI 过滤掉 → 箭头跳到再上一个展示行
+        # cp=99.6，$100 为主刻度但 OI 0/0 被过滤；上界行 = $105（max pain 必保留）
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [95.0, 100.0, 105.0],
+                "call_oi_wan": [1.2, 0.0, 5.0],
+                "put_oi_wan": [2.0, 0.0, 1.0],
+            },
+            current_price=99.6,
+            call_wall=None,
+            put_wall={"strike": 95.0},
+            max_pain={"strike": 105.0},
+        )
+        self.assertNotIn("$ 100", out)
+        self.assertIn("← 现价 $99.60", _ascii_line_with(out, "$ 105"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -469,10 +469,12 @@ def _render_butterfly_ascii(
       ① 主刻度由 _major_tick_for_price(cp) 决定（$10 / $5 / $2.5 / $1）；
          现价上下各取 BUTTERFLY_TICKS_PER_SIDE 个主刻度整数关口
          （SPY $745.64 → $10 主刻度 → 上 [$750-$790] + 下 [$700-$740]）
-      ② 必保留：call_wall / put_wall / max_pain / deep_supports / deep_resistances /
-         现价上下相邻 strike（即使不在主刻度上、即使被 OI 过滤）
+      ② 必保留：call_wall / put_wall / max_pain / deep_supports / deep_resistances
+         （即使不在主刻度上、即使被 OI 过滤）
       ③ OI 阈值：非必保留行需 max(call_oi, put_oi) ≥ BUTTERFLY_MIN_ROW_OI_WAN
       ④ 选中 strike 按 strike 降序展示，**不插入 gap marker**（strike 数字本身指示跳跃）
+      ⑤ 现价箭头标"已展示行中 strike ≥ 现价的最小者"（上界行）；
+         现价高于全部展示行 → 标最顶行（低于全部时上界行即最底行）
 
     口径说明（写在 header）：OI 数字 = ≤14d 多 expiry 合计。散户对账友商单 expiry 数字会高，是口径不同（非 bug）。
     """
@@ -502,10 +504,6 @@ def _render_butterfly_ascii(
     for cluster in (deep_supports or []) + (deep_resistances or []):
         must_keep.add(cluster["strike"])
 
-    # 现价上下相邻 strike（基于全集 strikes）
-    nearby_below = max((k for k in strikes if k < cp), default=None)
-    nearby_above = min((k for k in strikes if k >= cp), default=None)
-
     # ① 找现价上下最近的主刻度
     next_tick_above = (int(cp // TICK) + 1) * TICK
     next_tick_below = int(cp // TICK) * TICK
@@ -520,29 +518,24 @@ def _render_butterfly_ascii(
     major_ticks &= strike_set
 
     # ③ 必保留 + 主刻度并集
-    chosen = major_ticks | must_keep | {
-        s for s in (nearby_above, nearby_below) if s is not None
-    }
-    chosen &= strike_set
+    chosen = (major_ticks | must_keep) & strike_set
 
     # ④ OI 过滤：每行 max(call_oi, put_oi) ≥ MIN_ROW_OI；
-    #    must_keep 集合内的强制保留（Wall / MP / 深度集群 / 现价相邻）
-    forced_keep = must_keep | {
-        s for s in (nearby_above, nearby_below) if s is not None
-    }
+    #    must_keep（Wall / MP / 深度集群）强制保留
     selected = []
     for k, c, p in zip(strikes, call_oi, put_oi):
         if k not in chosen:
             continue
-        if k in forced_keep or max(c, p) >= MIN_ROW_OI:
+        if k in must_keep or max(c, p) >= MIN_ROW_OI:
             selected.append((k, c, p))
     selected.sort(key=lambda x: -x[0])  # descending
 
-    def render_row(k: float, c: float, p: float) -> str:
+    def render_row(k: float, c: float, p: float, show_arrow: bool) -> str:
         pb = bar_str(p)
         cb = bar_str(c)
         pl = f"{p:.1f}"
         cl = f"{c:.1f}万"
+        ks = f"{k:.0f}" if k == int(k) else f"{k:.1f}"  # 单位铁律：整数去小数点、非整数留一位
         tags = []
         if cw is not None and k == cw:
             tags.append("● CALL WALL")
@@ -550,16 +543,21 @@ def _render_butterfly_ascii(
             tags.append("● PUT WALL")
         if mp is not None and k == mp:
             tags.append("◆ MAX PAIN")
-        if k == nearby_above:
-            tags.append(f"← 现价 ${cp:.2f}")
-        elif nearby_above is None and selected and k == selected[0][0]:
+        if show_arrow:
             tags.append(f"← 现价 ${cp:.2f}")
         tag_str = "  " + "  ".join(tags) if tags else ""
-        return f"            {pl:>5} {pb:<6} ───── ${k:>4.0f} ─────  {cb} {cl}{tag_str}"
+        return f"            {pl:>5} {pb:<6} ───── ${ks:>4} ─────  {cb} {cl}{tag_str}"
 
-    output_rows: list[str] = [render_row(k, c, p) for k, c, p in selected]
+    # 现价箭头：已展示行中 strike ≥ cp 的最小者（上界行）；
+    # cp 高于全部 → 最顶行；cp 低于全部 → 全行皆候选 → 最底行。
+    arrow_candidates = [i for i, (k, _, _) in enumerate(selected) if k >= cp]
+    arrow_idx = max(arrow_candidates) if arrow_candidates else 0
+    output_rows: list[str] = [
+        render_row(k, c, p, show_arrow=(i == arrow_idx))
+        for i, (k, c, p) in enumerate(selected)
+    ]
 
-    tick_label = f"${TICK:.0f}" if TICK >= 1 else f"${TICK:g}"
+    tick_label = f"${TICK:g}"
     lines = [
         f"持仓分布 · ≤14d 多 expiry 合计 · 现价 ${cp:.2f}",
         "",
