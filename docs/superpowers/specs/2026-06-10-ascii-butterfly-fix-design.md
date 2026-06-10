@@ -26,7 +26,9 @@
 ### 渲染规则变更（三条）
 
 1. **strike 标签格式**：整数 strike 显示无小数（`$60`），非整数保留一位（`$59.5`）——与 ai_payload strike 单位铁律同口径。右对齐 4 字符宽度不变。
-2. **删"现价相邻 strike 强制保留"**：`nearby_above` / `nearby_below` 从 `forced_keep` 与 `chosen` 移除。行准入只剩：关键位（call_wall / put_wall / max_pain / 深度集中点）或 `max(call_oi, put_oi) ≥ BUTTERFLY_MIN_ROW_OI_WAN`。
+2. **删"现价相邻 strike 强制保留"**：`nearby_above` / `nearby_below` 从 `forced_keep` 与 `chosen` 移除。行准入只剩两类：关键位（call_wall / put_wall / max_pain / 深度集中点，无条件保留）；主刻度窗口行（现价上下各 5 档主刻度，且 `max(call_oi, put_oi) ≥ BUTTERFLY_MIN_ROW_OI_WAN`）。OI 阈值是对主刻度窗口的**过滤**，不是全局**准入**——离网格的非关键 strike 即使 OI ≥ 1 万也不进图，否则 SPY 这类大链会让行数失控，违背"视觉密度稳定"的既有设计意图。
+
+**已知代价**：旧"相邻强制保留"规则会顺带展示现价旁离网格、OI 1-3 万档的 strike（如 $5 网格下的 $187.5）；新规则下它们不再显示。这是可接受的：近月 OI ≥ 3 万的 ATM strike 会被 Wall 规则捕获为关键位，丢失的只是中间档，且旧行为本是相邻规则的副产品而非有意设计。
 3. **现价箭头改为对已展示行判定**：箭头标"已展示行中 strike ≥ 现价的最小者"（即现价的上界行）；若现价高于全部展示行 → 标最顶行。该单条规则自然覆盖"现价恰好等于某行 strike"（标该行）与"现价低于全部展示行"（标最底行）两个边界，且与原 `nearby_above` 语义连续——只是判定域从"全部 strike"收窄为"已展示行"，不再依赖相邻 strike 在场。
 
 ### spec / 文档同步

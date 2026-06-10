@@ -522,12 +522,11 @@ def _render_butterfly_ascii(
 
     # ④ OI 过滤：每行 max(call_oi, put_oi) ≥ MIN_ROW_OI；
     #    must_keep（Wall / MP / 深度集群）强制保留
-    forced_keep = must_keep
     selected = []
     for k, c, p in zip(strikes, call_oi, put_oi):
         if k not in chosen:
             continue
-        if k in forced_keep or max(c, p) >= MIN_ROW_OI:
+        if k in must_keep or max(c, p) >= MIN_ROW_OI:
             selected.append((k, c, p))
     selected.sort(key=lambda x: -x[0])  # descending
 
