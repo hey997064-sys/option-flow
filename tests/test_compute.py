@@ -952,6 +952,72 @@ class TestRenderButterflyAscii(unittest.TestCase):
         )
         self.assertIn("$2.5 整数关口", out)
 
+    def test_zero_oi_adjacent_strike_dropped(self):
+        # DRAM 形态：现价下方相邻 $59.5 OI 0/0，不得为"相邻"而强制渲染
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [55.0, 59.0, 59.5, 60.0, 65.0],
+                "call_oi_wan": [0.8, 0.3, 0.0, 1.5, 1.9],
+                "put_oi_wan": [1.3, 0.3, 0.0, 0.8, 0.4],
+            },
+            current_price=59.86,
+            call_wall={"strike": 65.0},
+            put_wall={"strike": 55.0},
+            max_pain={"strike": 59.0},
+        )
+        self.assertNotIn("59.5", out)
+        body = [l for l in out.splitlines() if "─────" in l]
+        self.assertEqual(sum("$  60 " in l for l in body), 1)
+        # 箭头在上界行 $60（已展示行中 strike ≥ 59.86 的最小者）
+        self.assertIn("← 现价 $59.86", _ascii_line_with(out, "$  60"))
+
+    def test_arrow_on_upper_bound_row(self):
+        # 现价 99.5 落在 95 与 100 之间 → 箭头标 $100 行（上界行）
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [95.0, 100.0, 105.0],
+                "call_oi_wan": [1.2, 3.0, 5.0],
+                "put_oi_wan": [2.0, 1.5, 1.0],
+            },
+            current_price=99.5,
+            call_wall={"strike": 105.0},
+            put_wall={"strike": 95.0},
+            max_pain={"strike": 100.0},
+        )
+        self.assertIn("← 现价 $99.50", _ascii_line_with(out, "$ 100"))
+
+    def test_arrow_when_price_above_all_rows(self):
+        # 现价高于全部展示行 → 箭头标最顶行
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [50.0, 55.0, 60.0],
+                "call_oi_wan": [1.0, 2.0, 3.0],
+                "put_oi_wan": [1.0, 2.0, 1.5],
+            },
+            current_price=70.0,
+            call_wall=None,
+            put_wall={"strike": 60.0},
+            max_pain={"strike": 55.0},
+        )
+        first_body_line = next(l for l in out.splitlines() if "─────" in l)
+        self.assertIn("← 现价 $70.00", first_body_line)
+
+    def test_arrow_when_price_below_all_rows(self):
+        # 现价低于全部展示行 → 全部行 strike ≥ cp，最小者 = 最底行
+        out = compute._render_butterfly_ascii(
+            {
+                "strikes": [50.0, 55.0, 60.0],
+                "call_oi_wan": [1.0, 2.0, 3.0],
+                "put_oi_wan": [1.0, 2.0, 1.5],
+            },
+            current_price=45.0,
+            call_wall={"strike": 50.0},
+            put_wall=None,
+            max_pain={"strike": 55.0},
+        )
+        last_body_line = [l for l in out.splitlines() if "─────" in l][-1]
+        self.assertIn("← 现价 $45.00", last_body_line)
+
 
 if __name__ == "__main__":
     unittest.main()
