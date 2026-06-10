@@ -24,7 +24,7 @@ current_price = ai_payload["current_price"]
 持仓分布 · 短期 ≤14d · 现价 ${current_price:.2f}
 
           PUT OI         STRIKE        CALL OI
-            {put_label:>5} ▎▎ ──── ${strike:>4.0f} ─────  ▎▎▎▎▎▎▎▎ {call_label:<6}  {tag}
+            {put_label:>5} ▎▎ ──── ${strike_label:>4} ─────  ▎▎▎▎▎▎▎▎ {call_label:<6}  {tag}
             ...
 ```
 
@@ -33,6 +33,7 @@ current_price = ai_payload["current_price"]
 - **柱字符**：`▎` 每个代表 1 万张（floor 取整）
 - **半柱**：0 < oi_wan < 1 用 `▏`
 - **零柱**：oi_wan = 0 留空（不画 `▏` 也不画 `▎`，保持空格对齐）
+- **strike 标签**：整数 strike 无小数（`$60`），非整数保留一位（`$59.5`）——与 ai_payload strike 单位铁律同口径，两个不同 strike 不得显示为同一数字
 - **最大柱长 30 字符**（防止超大 OI 把图压扁）：`min(int(oi_wan), 30) * '▎'`
 - **数字标签**：bar 外侧紧贴显示 `{oi_wan:.1f}万`
 - **strike 选择**（散户友好：主刻度自适应 + 必保留关键位 + OI 阈值过滤）：
@@ -49,8 +50,6 @@ current_price = ai_payload["current_price"]
   ③ **必保留**（即使不在主刻度上 / 即使距现价远）：
   - `call_wall.strike` / `put_wall.strike` / `max_pain.strike`
   - `deep_supports[].strike` / `deep_resistances[].strike`（让远端 OI 大点不被砍）
-  - 现价上下相邻 strike：`nearby_above` = min{k : k ≥ cp}，`nearby_below` = max{k : k < cp}
-
   ④ **OI 阈值过滤**：主刻度行只有 `max(call_oi_wan, put_oi_wan) ≥ BUTTERFLY_MIN_ROW_OI_WAN (= 1.0 万)` 才进图。必保留行不受过滤影响。
 
   ⑤ **降序展示**：取 ②③ 并集按 strike 降序排列，**不插入 gap marker**（strike 数字本身指示跳跃）。
@@ -70,9 +69,9 @@ current_price = ai_payload["current_price"]
 | `strike == call_wall.strike` | `● CALL WALL` |
 | `strike == put_wall.strike` | `● PUT WALL` |
 | `strike == max_pain.strike` | `◆ MAX PAIN` |
-| `current_price` 落在该 strike 与下一行 strike 之间 | `← 现价 ${current_price:.2f}`（注：「下一行」指 strike 降序中相邻的下一项，因为图是降序排，现价指向"该行 strike 之下"的位置） |
+| 现价的上界行（已展示行中 strike ≥ current_price 的最小者）| `← 现价 ${current_price:.2f}`（现价高于全部展示行时标最顶行；低于全部时上界行即最底行）|
 
-**现价指向逻辑**：strike 列表 `[..., 230, 225, 220, ...]`，current_price=225.32 → 标在 strike=225 那行末尾（即 `225 <= current_price < 230`，标在 strike=225）。若 current_price 高于所有 strike → 标在最顶行；低于所有 → 标在最底行。
+**现价指向逻辑**：展示行降序 `[..., 230, 225, 220, ...]`，current_price=225.32 → 标在 strike=230 那行（已展示行中 ≥ 225.32 的最小 strike）。若 current_price 高于所有展示行 → 标最顶行；低于所有 → 标最底行（此时全部行 ≥ 现价，最小者即最底行）。
 
 ## 列宽（等宽字体下）
 
@@ -122,13 +121,17 @@ def render_butterfly(ai_payload) -> str:
     # Descending iteration: high strikes on top
     pairs = sorted(zip(strikes, call_oi, put_oi), key=lambda x: -x[0])
 
+    # 现价箭头：已展示行中 strike ≥ cp 的最小者（上界行）；cp 高于全部 → 最顶行
+    arrow_candidates = [i for i, (k, _, _) in enumerate(pairs) if k >= cp]
+    arrow_idx = max(arrow_candidates) if arrow_candidates else 0
+
     for i, (k, c_oi, p_oi) in enumerate(pairs):
         put_bar  = bar_str(p_oi)
         call_bar = bar_str(c_oi)
         put_label  = f"{p_oi:.1f}"
         call_label = f"{c_oi:.1f}万"
+        strike_label = f"{k:.0f}" if k == int(k) else f"{k:.1f}"
 
-        # tags
         tags = []
         if cw is not None and k == cw:
             tags.append("● CALL WALL")
@@ -136,21 +139,14 @@ def render_butterfly(ai_payload) -> str:
             tags.append("● PUT WALL")
         if mp is not None and k == mp:
             tags.append("◆ MAX PAIN")
-        # 现价标注：当前 strike 是现价落入区间的上界
-        # i.e. 此行 strike <= cp < (上一行 strike) 或 (last row 且 cp < this strike)
-        next_strike = pairs[i + 1][0] if i + 1 < len(pairs) else None
-        if next_strike is not None and next_strike <= cp < k:
-            tags.append(f"← 现价 ${cp:.2f}")
-        elif next_strike is None and cp < k:
-            tags.append(f"← 现价 ${cp:.2f}")
-        elif i == 0 and cp >= k:
+        if i == arrow_idx:
             tags.append(f"← 现价 ${cp:.2f}")
 
         tag_str = "  " + "  ".join(tags) if tags else ""
 
         line = (
             f"            {put_label:>5} {put_bar:<6} ─────"
-            f" ${k:>4.0f} ─────"
+            f" ${strike_label:>4} ─────"
             f"  {call_bar} {call_label}{tag_str}"
         )
         lines.append(line)
@@ -170,8 +166,8 @@ def render_butterfly(ai_payload) -> str:
               0.5 ▏      ───── $245 ─────  ▎▎▎ 3.2万
               0.5 ▏      ───── $240 ─────  ▎▎▎▎▎▎▎▎▎▎▎▎ 12.7万  ● CALL WALL
               1.1 ▎      ───── $235 ─────  ▎▎▎▎▎▎▎ 7.8万
-              2.2 ▎▎     ───── $230 ─────  ▎▎▎▎▎▎▎▎ 8.1万
-              1.8 ▎      ───── $225 ─────  ▎▎▎ 3.9万  ← 现价 $225.32
+              2.2 ▎▎     ───── $230 ─────  ▎▎▎▎▎▎▎▎ 8.1万  ← 现价 $225.32
+              1.8 ▎      ───── $225 ─────  ▎▎▎ 3.9万
               3.1 ▎▎▎    ───── $220 ─────  ▎▎▎▎▎▎▎ 7.2万
               2.8 ▎▎     ───── $215 ─────  ▎▎▎▎▎ 5.7万  ● PUT WALL
               4.1 ▎▎▎▎   ───── $210 ─────  ▎▎▎▎▎▎▎ 7.5万  ◆ MAX PAIN
