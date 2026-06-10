@@ -21,7 +21,7 @@ current_price = ai_payload["current_price"]
 ## 视觉规则
 
 ```
-持仓分布 · 短期 ≤14d · 现价 ${current_price:.2f}
+持仓分布 · ≤14d 多 expiry 合计 · 现价 ${current_price:.2f}
 
           PUT OI         STRIKE        CALL OI
             {put_label:>5} ▎▎ ──── ${strike_label:>4} ─────  ▎▎▎▎▎▎▎▎ {call_label:<6}  {tag}
@@ -78,13 +78,15 @@ current_price = ai_payload["current_price"]
 - PUT OI 数字：右对齐 5 字符
 - 左柱区间：6 字符（最多 6 个 `▎`，溢出说明 OI 过大需 `+`）
 - `─────` 分隔：固定 5 个连字符
-- STRIKE：`$XXX` 整数美元，右对齐 4 字符
+- STRIKE：`$XX` 标签右对齐 4 字符（整数无小数 / 非整数留一位；5 字符标签如 `112.5` 自然溢出 1 字符）
 - `─────` 分隔：固定 5 个连字符
 - 右柱区间：可变长度（最多 30 字符）
 - CALL OI 数字：左对齐 6 字符
 - 标注：空格分隔，可有可无
 
-## 完整伪代码
+## 渲染伪代码（仅渲染层）
+
+> 选 strike 准入（主刻度窗口 ∩ OI 过滤 + 必保留）见上文「strike 选择」段；本伪代码假设入参已是选中行。
 
 ```python
 def render_butterfly(ai_payload) -> str:
@@ -113,7 +115,7 @@ def render_butterfly(ai_payload) -> str:
         return BAR * min(int(oi_wan), MAX_BARS)
 
     lines = [
-        f"持仓分布 · 短期 ≤14d · 现价 ${cp:.2f}",
+        f"持仓分布 · ≤14d 多 expiry 合计 · 现价 ${cp:.2f}",
         "",
         "          PUT OI         STRIKE        CALL OI",
     ]
@@ -151,15 +153,17 @@ def render_butterfly(ai_payload) -> str:
         )
         lines.append(line)
 
+    # TICKS_PER_SIDE / tick_label 来自选 strike 步骤
     lines.append("")
-    lines.append("每 ▎ ≈ 1 万张（OI）。Wall = 现价同侧 OI 最厚 strike；Max Pain = 让最多期权失效的价位。")
+    lines.append("每 ▎ ≈ 1 万张（OI）。OI = ≤14d 短期所有 expiry 在该 strike 合计。")
+    lines.append(f"显示规则：现价上下各 {TICKS_PER_SIDE} 档 {tick_label} 整数关口 + Wall / Max Pain / 深度集中点（OI ≥ 5 万）。")
     return "\n".join(lines)
 ```
 
 ## 输出样本（NVDA mock）
 
 ```
-持仓分布 · 短期 ≤14d · 现价 $225.32
+持仓分布 · ≤14d 多 expiry 合计 · 现价 $225.32
 
           PUT OI         STRIKE        CALL OI
               0.0        ───── $250 ─────  ▎▎▎▎▎▎▎▎▎▎▎▎▎▎ 14.3万
@@ -174,11 +178,12 @@ def render_butterfly(ai_payload) -> str:
               2.0 ▎▎     ───── $205 ─────  ▎▎▎▎ 4.1万
               3.8 ▎▎▎    ───── $200 ─────  ▎▎▎▎ 3.9万
 
-每 ▎ ≈ 1 万张（OI）。Wall = 现价同侧 OI 最厚 strike；Max Pain = 让最多期权失效的价位。
+每 ▎ ≈ 1 万张（OI）。OI = ≤14d 短期所有 expiry 在该 strike 合计。
+显示规则：现价上下各 5 档 $5 整数关口 + Wall / Max Pain / 深度集中点（OI ≥ 5 万）。
 ```
 
 ## 边界
 
-- `strikes` 长度 < 3：抛错（必填降级）
+- `strikes` 过短/为空：渲染层不校验，照常渲染（必填校验在上游 payload 层）
 - 所有 OI 都为 0：极端罕见，render 出来就是一堆 `─` 线，可加 `⚠️ 期权流动性极低` 提示
 - `current_price` 落在 strikes 范围外：标注画在最近一端
